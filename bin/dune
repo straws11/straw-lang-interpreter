@@ -1,0 +1,4 @@
+(executable
+ (public_name dlang-interpreter)
+ (name main)
+ (libraries dlang_interpreter))
