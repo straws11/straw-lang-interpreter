@@ -1,5 +1,5 @@
-open Dlang_interpreter.Lexer
-open Dlang_interpreter.Lexing_types
+open Straw_lang_interpreter.Lexer
+open Straw_lang_interpreter.Lexing_types
 
 let read_file name = In_channel.with_open_text name In_channel.input_lines
 

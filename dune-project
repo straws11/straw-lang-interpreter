@@ -1,6 +1,6 @@
 (lang dune 3.23)
 
-(name dlang-interpreter)
+(name straw-lang-interpreter)
 
 (generate_opam_files true)
 
@@ -16,7 +16,7 @@
 (documentation https://url/to/documentation)
 
 (package
- (name dlang-interpreter)
+ (name straw-lang-interpreter)
  (synopsis "A short synopsis")
  (description "A longer description")
  (depends ocaml)

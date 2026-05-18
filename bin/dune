@@ -1,4 +1,4 @@
 (executable
- (public_name dlang-interpreter)
+ (public_name straw-lang-interpreter)
  (name main)
- (libraries dlang_interpreter))
+ (libraries straw_lang_interpreter))

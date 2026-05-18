@@ -1,12 +1,5 @@
-(* helpers *)
-let string_of_rev_char_list chars = chars |> List.rev |> List.to_seq |> String.of_seq
+(* data *)
 
-let is_alpha char = let code = Char.code char in
-    (code >= 65 && code <= 90)
-    || (code >= 97 && code <= 122)
-    || (code = 95)
-
-(* core *)
 type t = {
     src: string;
     mutable pos: int;
@@ -16,6 +9,14 @@ type t = {
 
 let create src =
     {src; pos = 0; line = 1; col = 0}
+
+(* helpers *)
+let string_of_rev_char_list chars = chars |> List.rev |> List.to_seq |> String.of_seq
+
+let is_alpha char = let code = Char.code char in
+    (code >= 65 && code <= 90)
+    || (code >= 97 && code <= 122)
+    || (code = 95)
 
 let peek t =
     if t.pos >= String.length t.src then None
@@ -48,6 +49,15 @@ let advance t =
         t.col <- t.col + 1
     );
     c
+
+let match_char lexer expected = match peek lexer with
+    | Some x when x = expected ->
+        ignore (advance lexer);
+        true
+    | _ -> false
+
+
+(* core *)
 
 let number cur_char lexer =
     let rec loop acc = match peek lexer with
@@ -103,22 +113,25 @@ let rec next_token lexer = match advance_opt lexer with
         | ';' -> Lexing_types.Semicolon
         | '/' -> Lexing_types.Slash
         | '*' -> Lexing_types.Star
-        | '!' -> begin match peek lexer with
-            | Some '=' -> Lexing_types.BangEqual
-            | _ -> Lexing_types.Bang
-            end
-        | '=' -> begin match peek lexer with
-            | Some '=' -> Lexing_types.EqualEqual
-            | _ -> Lexing_types.Equal
-            end
-        | '>' -> begin match peek lexer with
-            | Some '=' -> Lexing_types.GreaterEqual
-            | _ -> Lexing_types.Greater
-            end
-        | '<' -> begin match peek lexer with
-            | Some '=' -> Lexing_types.LessEqual
-            | _ -> Lexing_types.Less
-            end
+        | '!' -> if match_char lexer '=' then
+                Lexing_types.BangEqual
+            else
+                Lexing_types.Bang
+
+        | '=' -> if match_char lexer '=' then
+                Lexing_types.EqualEqual
+            else
+                Lexing_types.Equal
+
+        | '>' -> if match_char lexer '=' then
+                Lexing_types.GreaterEqual
+            else
+                Lexing_types.Greater
+
+        | '<' -> if match_char lexer '=' then
+                Lexing_types.LessEqual
+            else
+                Lexing_types.Less
 
         | '0'..'9' -> number x lexer
         | '"' -> str lexer
