@@ -98,44 +98,55 @@ let identifier cur_char lexer =
 
 
 
-let rec next_token lexer = match advance_opt lexer with
-    | Some x -> (match x with
-        (* ignore whitespace *)
-        | ' ' | '\n' | '\r' | '\t' -> next_token lexer
-        | '(' -> Lexing_types.LParen
-        | ')' -> Lexing_types.RParen
-        | '{' -> Lexing_types.LBrace
-        | '}' -> Lexing_types.RBrace
-        | ',' -> Lexing_types.Comma
-        | '.' -> Lexing_types.Dot
-        | '-' -> Lexing_types.Minus
-        | '+' -> Lexing_types.Plus
-        | ';' -> Lexing_types.Semicolon
-        | '/' -> Lexing_types.Slash
-        | '*' -> Lexing_types.Star
-        | '!' -> if match_char lexer '=' then
-                Lexing_types.BangEqual
-            else
-                Lexing_types.Bang
+let next_token lexer =
+    let rec next_token_kind lexer = match advance_opt lexer with
+        | Some x -> (match x with
+            (* ignore whitespace *)
+            | ' ' | '\n' | '\r' | '\t' -> next_token_kind lexer
+            | '(' -> Lexing_types.LParen
+            | ')' -> Lexing_types.RParen
+            | '{' -> Lexing_types.LBrace
+            | '}' -> Lexing_types.RBrace
+            | ',' -> Lexing_types.Comma
+            | '.' -> Lexing_types.Dot
+            | '-' -> Lexing_types.Minus
+            | '+' -> Lexing_types.Plus
+            | ';' -> Lexing_types.Semicolon
+            | '/' -> Lexing_types.Slash
+            | '*' -> Lexing_types.Star
+            | '!' -> if match_char lexer '=' then
+                    Lexing_types.BangEqual
+                else
+                    Lexing_types.Bang
 
-        | '=' -> if match_char lexer '=' then
-                Lexing_types.EqualEqual
-            else
-                Lexing_types.Equal
+            | '=' -> if match_char lexer '=' then
+                    Lexing_types.EqualEqual
+                else
+                    Lexing_types.Equal
 
-        | '>' -> if match_char lexer '=' then
-                Lexing_types.GreaterEqual
-            else
-                Lexing_types.Greater
+            | '>' -> if match_char lexer '=' then
+                    Lexing_types.GreaterEqual
+                else
+                    Lexing_types.Greater
 
-        | '<' -> if match_char lexer '=' then
-                Lexing_types.LessEqual
-            else
-                Lexing_types.Less
+            | '<' -> if match_char lexer '=' then
+                    Lexing_types.LessEqual
+                else
+                    Lexing_types.Less
 
-        | '0'..'9' -> number x lexer
-        | '"' -> str lexer
-        | _ -> (if is_alpha x then identifier x lexer
-                else failwith "No valid token start")
-        )
-    | None -> Lexing_types.EOF
+            | '0'..'9' -> number x lexer
+            | '"' -> str lexer
+            | _ -> (if is_alpha x then identifier x lexer
+                    else failwith "No valid token start")
+            )
+        | None -> Lexing_types.EOF
+    in
+    let kind = next_token_kind lexer in
+    let token : Lexing_types.token = {
+        Lexing_types.kind = kind;
+        Lexing_types.pos = {
+            Lexing_types.line = lexer.line;
+            Lexing_types.column = lexer.col
+            }
+        } in
+    token

@@ -31,6 +31,7 @@ type token_kind =
     | Identifier of string
     | String of string
     | Number of float
+    | Boolean of bool
 
     (* keywords *)
     | And
@@ -40,7 +41,9 @@ type token_kind =
     | If
     | Or
     | Return
-    | Var
+    | Num
+    | Str
+    | Bool
     | While
 
     | EOF
@@ -74,6 +77,7 @@ let string_of_token token_type = match token_type with
     | Identifier x -> "Identifier(" ^ x ^ ")"
     | String x -> "String(" ^ x ^ ")"
     | Number x -> "Number(" ^ string_of_float x ^ ")"
+    | Boolean x -> "Boolean(" ^ string_of_bool x ^ ")"
     | And -> "And"
     | Else -> "Else"
     | Fun -> "Fun"
@@ -81,7 +85,9 @@ let string_of_token token_type = match token_type with
     | If -> "If"
     | Or -> "Or"
     | Return -> "Return"
-    | Var -> "Var"
+    | Num -> "Num"
+    | Str -> "Str"
+    | Bool -> "Bool"
     | While -> "While"
     | EOF -> "EOF"
 
@@ -97,6 +103,8 @@ let reserved_words = StringMap.of_seq @@ List.to_seq [
     ("if", If);
     ("or", Or);
     ("return", Return);
-    ("var", Var);
+    ("num", Num);
+    ("str", Str);
+    ("bool", Bool);
     ("while", While);
 ]

@@ -1,5 +1,4 @@
-open Straw_lang_interpreter.Lexer
-open Straw_lang_interpreter.Lexing_types
+open Straw_lang_interpreter
 
 let read_file name = In_channel.with_open_text name In_channel.input_lines
 
@@ -15,13 +14,26 @@ let () =
 
     let lines = read_file file_name in
 
-    let lexer = create (String.concat "\n" lines) in
+    let lexer = Lexer.create (String.concat "\n" lines) in
 
-    let rec loop () = match next_token lexer with
-        | EOF -> print_endline (string_of_token EOF)
-        | tok -> print_endline (string_of_token tok);
-            loop ()
+    let rec loop toks = let token = Lexer.next_token lexer in
+        print_endline (Lexing_types.string_of_token token.kind);
+        let new_acc = token :: toks in
+
+        if token.kind != Lexing_types.EOF then
+            loop new_acc
+        else
+            new_acc
     in
-    loop ()
+    let toks = loop [] in
+    let parser = Parser.create (toks |> List.rev |> Array.of_list) in
+    let ast = Parser.parse parser in
 
-    (* print_endline ("Tokens: " ^ string_of_token_list tokens); *)
+    let rec loop rem = match rem with
+        | h :: t -> Ast.string_of_expr h ^ loop t
+        | [] -> ""
+    in
+    let out = loop ast in
+    print_endline (out);
+
+
