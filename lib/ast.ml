@@ -31,7 +31,16 @@ type expr =
 
     | Group of expr
 
-type body = expr list
+type statement =
+    | IfStmt of expr * block * block option (* conditional_expr then_block else_block *)
+    | ForStmt
+    | WhileStmt of expr * block
+    | ReturnStmt of expr
+    | AssignStmt of string * expr
+    | VarDeclStmt of data_type * string * expr option
+
+type block = statement list
+
 
 (* stringify *)
 
@@ -68,3 +77,24 @@ let rec string_of_expr expr = match expr with
         string_of_unary_op un_op ^ " " ^ string_of_expr expr
         ^ ")"
     | Group x -> "(" ^ string_of_expr x ^ ")"
+
+
+let rec string_of_block block = "[" ^ String.concat ", " (List.map string_of_statement block) ^ "]"
+
+and string_of_statement stmt = match stmt with
+    | IfStmt e, b, bo -> "If(" ^ string_of_expr e ^ ", Then(" ^ string_of_block b ^ ")"
+        ^ begin match bo with
+            | Some x -> ", Else(" ^ string_of_block b ^ ")"
+            | None -> ""
+            end
+        ^ ")"
+    | WhileStmt e, b -> "While(" ^ string_of_expr e ^ string_of_block b ^ ")"
+    | ReturnStmt e -> "Return(" ^ string_of_expr e ^ ")"
+    | VarDeclStmt dt, s, eo -> "VarDecl(" ^ string_of_data_type dt ^ s
+        ^ begin match eo with
+            | Some e -> string_of_expr e
+            | None -> ""
+            end
+        ^ ")"
+    | AssignStmt s, e -> "Assign(" ^ s ^ string_of_expr e ^ ")"
+
