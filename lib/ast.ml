@@ -25,22 +25,25 @@ type expr =
     | StrLit of string
 
     | Variable of string
+    | Call of expr * expr list
 
     | Binary of expr * binary_op * expr
     | Unary of unary_op * expr
 
+    | Assign of string * expr
+
     | Group of expr
 
-type statement =
-    | IfStmt of expr * block * block option (* conditional_expr then_block else_block *)
-    | ForStmt
-    | WhileStmt of expr * block
-    | ReturnStmt of expr
-    | AssignStmt of string * expr
-    | VarDeclStmt of data_type * string * expr option
 
 type block = statement list
 
+and statement =
+    | IfStmt of expr * block * block option (* conditional_expr then_block else_block *)
+    | WhileStmt of expr * block
+    | ReturnStmt of expr option
+    | VarDeclStmt of data_type * string * expr option
+    | ExprStmt of expr (* example foo(1,2) or print(x) are expressions but they are used as statements ofc *)
+    | BlockStmt of block
 
 (* stringify *)
 
@@ -66,35 +69,46 @@ let string_of_unary_op op = match op with
     | Negate -> "-"
 
 let rec string_of_expr expr = match expr with
-    | NumLit x -> string_of_float x
-    | BoolLit x -> string_of_bool x
-    | StrLit x -> x
-    | Variable x -> x
-    | Binary (expr1, bin_op, expr2) -> "(" ^
-            string_of_binary_op bin_op ^ " " ^ string_of_expr expr1 ^ " " ^ string_of_expr expr2
-            ^ ")"
-    | Unary (un_op, expr) -> "(" ^
-        string_of_unary_op un_op ^ " " ^ string_of_expr expr
-        ^ ")"
-    | Group x -> "(" ^ string_of_expr x ^ ")"
+    | NumLit x -> "NumLit(" ^ string_of_float x ^ ")"
+    | BoolLit x -> "BoolLit(" ^ string_of_bool x ^ ")"
+    | StrLit x -> "StrLit(" ^ x ^ ")"
+    | Variable x -> "Variable(" ^ x ^ ")"
+
+    | Call (expr, expr_list) -> "Call(" ^ string_of_expr expr ^ ", ["
+        ^ String.concat ", " (List.map string_of_expr expr_list) ^ "])"
+
+    | Binary (expr1, bin_op, expr2) -> "Binary(" ^ string_of_expr expr1
+        ^ string_of_binary_op bin_op ^ string_of_expr expr2 ^ ")"
+
+    | Unary (un_op, expr) -> "Unary(" ^ string_of_unary_op un_op ^ string_of_expr expr ^ ")"
+
+    | Assign (s, e) -> "Assign(" ^ s ^ " = " ^ string_of_expr e ^ ")"
+
+    | Group x -> "Group(" ^ string_of_expr x ^ ")"
 
 
 let rec string_of_block block = "[" ^ String.concat ", " (List.map string_of_statement block) ^ "]"
 
 and string_of_statement stmt = match stmt with
-    | IfStmt e, b, bo -> "If(" ^ string_of_expr e ^ ", Then(" ^ string_of_block b ^ ")"
+    | IfStmt (e, b, bo) -> "If(" ^ string_of_expr e ^ ", Then(" ^ string_of_block b ^ ")"
         ^ begin match bo with
             | Some x -> ", Else(" ^ string_of_block b ^ ")"
             | None -> ""
             end
         ^ ")"
-    | WhileStmt e, b -> "While(" ^ string_of_expr e ^ string_of_block b ^ ")"
-    | ReturnStmt e -> "Return(" ^ string_of_expr e ^ ")"
-    | VarDeclStmt dt, s, eo -> "VarDecl(" ^ string_of_data_type dt ^ s
+    | WhileStmt (e, b) -> "While(" ^ string_of_expr e ^ " do " ^ string_of_block b ^ ")"
+    | ReturnStmt eo -> "Return(" ^ begin match eo with
+        | Some e -> string_of_expr e
+        | None -> ""
+    end ^ ")"
+
+    | VarDeclStmt (dt, s, eo) -> "VarDecl(" ^ string_of_data_type dt ^ " " ^ s ^ " = "
         ^ begin match eo with
             | Some e -> string_of_expr e
             | None -> ""
             end
         ^ ")"
-    | AssignStmt s, e -> "Assign(" ^ s ^ string_of_expr e ^ ")"
+
+    | ExprStmt e -> "ExprStmt(" ^ string_of_expr e ^ ")"
+    | BlockStmt b -> "BlockStmt(" ^ string_of_block b ^ ")"
 

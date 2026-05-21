@@ -3,14 +3,25 @@ open Ast
 (*
 ----EBNF----
 
-    primary = NUMBER | STRING | BOOLEAN | "(" expr ")"
-    unary = ( "!" | "-" ) unary
-        | primary;
-    factor = unary ( ( "/" | "*" ) unary )*;
-    term = factor ( ( "+" | "-" ) factor )*;
-    comparison = term ( ( ">" | ">=" | "<" | "<=" | "!=" | "==" ) term )*;
-    expr = comparison;
-    body = expr*;
+    primary = NUMBER | STRING | BOOLEAN | IDENTIFIER | "(" expr ")"
+    call = primary ( "(" [ expr_list ] ")" )*
+    unary = ( "!" | "-" ) unary | call
+    factor = unary ( ( "/" | "*" ) unary )*
+    term = factor ( ( "+" | "-" ) factor )*
+    comparison = term ( ( ">" | ">=" | "<" | "<=" | "!=" | "==" ) term )*
+    assignment = IDENTIFIER "=" assignment | comparison
+    expr = assignment | comparison
+    block = "{" ( statement )* "}"
+    if = "if" expr "then" block [ "else" block ]
+    for_initializer = [ assignment | declaration ]
+    for_condition = [ expr ]
+    for_increment = [ expr ]
+    for = "for" "(" for_initializer ";" for_condition ";" for_increment ")" block
+    while = "while" expr "do" block
+    return = "return" [ expr ]
+    declaration = ( num | bool | str ) IDENTIFIER [ "=" expr ]
+    statement = ( if | for | while | return | declaration | expr_stmt )
+    body = ( statement )*
 *)
 
 (* data *)
@@ -23,6 +34,10 @@ let create tokens = { tokens; pos = 0 }
 
 exception Parse_error of string * Lexing_types.position
 
+    let () = Printexc.register_printer (function
+        | Parse_error (s, pos) -> Some (Printf.sprintf "ParseError: %s at %d:%d" s pos.line pos.column)
+        | _ -> None
+    )
 
 (* helper *)
 let get_comparison_op tok = match tok with
@@ -54,12 +69,25 @@ let peek parser = if parser.pos >= Array.length parser.tokens then
     else
         Some parser.tokens.(parser.pos).kind
 
+let peek_next parser = if parser.pos + 1 >= Array.length parser.tokens then
+        None
+    else
+        Some parser.tokens.(parser.pos + 1).kind
+
 let advance parser = if parser.pos >= Array.length parser.tokens then
         None
     else
         let tok = parser.tokens.(parser.pos) in
         parser.pos <- parser.pos + 1;
         Some tok.kind
+
+(* peek and advance if expected, else nothing *)
+let consume parser expected = match peek parser with
+    | Some expected ->
+        ignore (advance parser);
+        true
+    | _ -> false
+
 
 let get_err_pos parser = parser.tokens.(parser.pos).pos
 
@@ -83,51 +111,43 @@ let expect parser expected msg =
                 raise (Parse_error ("Unexpected end of input", get_err_pos parser))
 
 let expect_id parser = match advance parser with
-    | Some Identifier x -> y
+    | Some Identifier x -> x
     | _ -> raise (Parse_error ("Expected identifier", get_err_pos parser))
 
+(* TODO: should this be called starts_call?? *)
 let starts_primary tok = match tok with
     | Identifier _ | String _ | Boolean _ | Number _ | LParen -> true
     | _ -> false
-
-let starts_expr tok = match tok with
-    | Bang | Minus -> true
-    | x -> starts_primary tok
 
 let starts_declaration tok = match tok with
     | Num | Str | Bool -> true
     | _ -> false
 
-let starts_assignment tok = match tok with
-    | Identifier -> peek_next 
+let starts_assignment parser = match peek parser with
+    | Some Identifier _ -> peek_next parser = Some Equal
+    | _ -> false
+
+let starts_expr parser = match peek parser with
+    | Some x when starts_primary x -> true
+    | Some _ when starts_assignment parser -> true
+    | Some Bang | Some Minus -> true
+    | _ -> false
+
 
 (* core *)
 
 (*
-    identifier = IDENTIFIER [ "(" expr_list ")" ]
+    primary = NUMBER | STRING | BOOLEAN | IDENTIFIER | "(" expr ")"
 *)
-let rec parse_identifier parser =
-    let id = expect_id parser in
+let rec parse_primary parser =
+    print_endline ("got a primary" ^ string_of_token parser.tokens.(parser.pos).kind );
     match peek parser with
-        | Some LParen -> ignore (advance parser);
-            let exprs = parse_expr_list parser in
-            expect RParen "Expected ')' after expression";
-            exprs (* TODO: need a type to wrap this in *)
-        | _ -> Variable id
-
-(*
-    primary = NUMBER | STRING | BOOLEAN | identifier | "(" expr ")"
-*)
-and parse_primary parser =
-    print_endline ("<primary>");
-    print_endline (parser.tokens.(parser.pos).kind |> string_of_token);
-    match peek parser with
-    | Some tok when tok = Identifier -> parse_identifier parser
     | Some tok -> ignore (advance parser);
         begin match tok with
         | String x -> StrLit x
         | Number x -> NumLit x
         | Boolean x -> BoolLit x
+        | Identifier x -> Variable x
         | LParen ->
             let expr = parse_expr parser in
             expect parser RParen "Expected ')' after expression";
@@ -139,11 +159,16 @@ and parse_primary parser =
     | None -> failwith "Unexpected end of input"
 
 (*
+    call = primary ( "(" [ expr_list ] ")" )*
+*)
+and parse_call parser = parse_primary parser (* TODO: this func *)
+
+
+(*
     unary = ( "!" | "-" ) unary
-        | primary
+        | call
 *)
 and parse_unary parser =
-    print_endline ("<unary>");
     match peek parser with
     | Some tok ->
         begin match get_unary_op tok with
@@ -151,7 +176,7 @@ and parse_unary parser =
                     ignore (advance parser);
                     let un = parse_unary parser in
                     Unary (op, un)
-            | None -> parse_primary parser
+            | None -> parse_call parser
         end
     | None -> failwith "TODO Unexpected end of input. Expected unary."
 
@@ -159,7 +184,6 @@ and parse_unary parser =
     factor = unary ( ( "/" | "*" ) unary )*
 *)
 and parse_factor parser =
-    print_endline ("<factor>");
     let unary = parse_unary parser in
     parse_factor_tail parser unary
 
@@ -178,9 +202,10 @@ and parse_factor_tail parser left =
     term = factor ( ( "+" | "-" ) factor )*
 *)
 and parse_term parser =
-    print_endline ("<term>");
     let factor = parse_factor parser in
-    parse_term_tail parser factor
+    let temp = parse_term_tail parser factor in
+    print_endline ("parsed term.." ^ string_of_expr temp);
+    temp
 
 and parse_term_tail parser left =
     match peek parser with
@@ -197,9 +222,11 @@ and parse_term_tail parser left =
     comparison = term ( ( ">" | ">=" | "<" | "<=" | "!=" | "==" ) term )*
 *)
 and parse_comparison parser =
-    print_endline ("<comparison>");
     let term = parse_term parser in
-    parse_comparison_tail parser term
+    let temp = parse_comparison_tail parser term in
+    print_endline ("parsed comp: " ^ string_of_expr temp);
+    temp
+
 
 and parse_comparison_tail parser left =
     match peek parser with
@@ -213,54 +240,185 @@ and parse_comparison_tail parser left =
         | None -> left (* there is no token at all *)
 
 (*
-    expr = comparison;
-*)
-and parse_expr parser =
-    print_endline ("next expr parsing..");
-    parse_comparison parser
-
-(*
-    if = "if" expr "then"?? "{" statements "}" [ "else" "{" statements "}" ]
-*)
-and parse_if parser = expect parser If "Expected start of 'if'";
-    let expr = parse_expr parser in
-    expect parser Then "Expected 'then'";
-    expect parser LBrace "Expected '{'";
-    let body = parse_statements parser in
-    expect parser RBrace "Expected '}'";
-
-    let else_part = match peek parser with
-        | Some Else -> ignore (advance parser);
-            expect parser LBrack "Expect"
-
-and parse_block parser =
-        expect parser LBrace "Expected '{'";
-        let body = parse_statements parser in
-        expect parser RBrace "Expected '}'";
-        body
-
-(*
-*)
-and parse_for parser =
-
-(*
-*)
-and parse_while parser =
-
-(*
-*)
-and parse_return parser =
-
-(*
-*)
-and parse_declaration parser =
-
-(*
+    assignment = IDENTIFIER "=" assignment | comparison
 *)
 and parse_assignment parser =
+    match peek parser with
+        | Some Identifier id ->
+            begin match peek_next parser with
+                | Some Equal ->
+                    ignore (advance parser);
+                    ignore (advance parser);
+                    let assignment = parse_assignment parser in
+                    let a = Assign (id, assignment) in
+                    print_endline ("the assign: " ^ string_of_expr a);
+                    a
+                | _ -> parse_comparison parser
+                end
+        | _ -> parse_comparison parser
 
 (*
-    statement = ( if | for | while | return | assignment )
+    expr = assignment | comparison
+*)
+and parse_expr parser =
+    match peek parser with
+        | Some Identifier _ -> begin match peek_next parser with
+            | Some Equal -> parse_assignment parser
+            | _ -> parse_comparison parser
+            end
+        | _ -> parse_comparison parser
+
+(*
+    block = "{" ( statement )* "}"
+*)
+and parse_block parser =
+    print_endline ("parsing the stmt block");
+    let rec loop acc = match peek parser with
+            | Some RBrace -> acc
+            | Some x -> let stmt = parse_statement parser in
+                loop (stmt :: acc)
+            | None -> raise (Parse_error ("Block not closed", get_err_pos parser))
+    in
+
+    expect parser LBrace "Expected '{'";
+
+    let body = List.rev (loop []) in
+    print_endline ("done parsing the stmt block" ^ string_of_block body);
+
+    expect parser RBrace "Expected '}'";
+    body (* TODO: this needs some wrapper?? *)
+
+
+(*
+    if = "if" expr "then" block [ "else" block ]
+*)
+and parse_if parser =
+    expect parser If "Expected start of 'if'";
+    let expr = parse_expr parser in
+    expect parser Then "Expected 'then'";
+    let then_body = parse_block parser in
+    match peek parser with
+        | Some Else -> ignore (advance parser);
+            let else_body = parse_block parser in
+            IfStmt (expr, then_body, Some else_body)
+
+        | _ -> IfStmt (expr, then_body, None)
+
+(*
+    for_initializer = [ assignment | declaration ]
+*)
+and parse_for_initializer parser =
+    match peek parser with
+        | Some x when starts_declaration x -> Some (parse_declaration parser)
+        | Some x when starts_assignment parser -> Some (ExprStmt (parse_assignment parser))
+        | _ -> None
+
+(*
+    for_condition = [ expr ]
+*)
+and parse_for_condition parser =
+    if starts_expr parser then
+        Some (parse_expr parser)
+    else
+        None
+
+(*
+    for_increment = [ expr ]
+*)
+and parse_for_increment parser =
+    if starts_expr parser then
+        Some (parse_expr parser)
+    else
+        None
+
+(*
+    for = "for" "(" for_initializer ";" for_condition ";" for_increment ")" block
+*)
+and parse_for parser =
+    expect parser For "Shouldn't be a problem";
+    expect parser LParen "Expected '('";
+
+    let for_init = parse_for_initializer parser in
+    expect parser Semicolon "Expected ';'";
+
+    let for_cond = parse_for_condition parser in
+    expect parser Semicolon "Expected ';'";
+
+    let for_inc = parse_for_increment parser in
+    expect parser RParen "Expected ')'";
+
+    let body = parse_block parser in
+    print_endline ("do we get here");
+
+    (* now we turn the for into a while:
+       finit
+       while (fcond) {
+        body
+        finc
+       }
+    *)
+    let while_body = match for_inc with
+        | Some inc -> body @ [ExprStmt inc]
+        | None -> body
+    in
+    let while_cond = match for_cond with
+        | Some cond -> cond
+        | None -> BoolLit true
+    in
+
+    let block = match for_init with
+            | Some init -> [init]
+            | None -> []
+    in
+
+    let block' = block @ [WhileStmt (while_cond, while_body)] in
+
+    BlockStmt (block')
+
+
+(*
+    while = "while" expr "do" block
+*)
+and parse_while parser =
+    expect parser While "This shouldn't ever happen";
+    let expr = parse_expr parser in
+    expect parser Do "Expected 'do'";
+    WhileStmt (expr, parse_block parser)
+
+(*
+    return = "return" [ expr ]
+*)
+and parse_return parser =
+    expect parser Return "This shouldn't ever happen";
+    match peek parser with
+        | Some x when starts_expr parser ->
+            let expr = parse_expr parser in
+            ReturnStmt (Some expr)
+
+        | _ -> ReturnStmt None
+
+(*
+    declaration = ( num | bool | str ) IDENTIFIER [ "=" expr ]
+*)
+and parse_declaration parser =
+    let data_type = match advance parser with
+        | Some Num -> TNumber
+        | Some Bool -> TBoolean
+        | Some Str -> TString
+        | _ -> raise (Parse_error ("Shouldn't be possible", get_err_pos parser))
+    in
+    let id = expect_id parser in
+    let init = match peek parser with
+        | Some Equal ->
+            ignore (advance parser);
+            Some (parse_expr parser)
+        | _ -> None
+    in
+
+    VarDeclStmt (data_type, id, init)
+
+(*
+    statement = ( if | for | while | return | declaration | expr_stmt )
  *)
 and parse_statement parser = match peek parser with
     | Some If -> parse_if parser
@@ -268,25 +426,20 @@ and parse_statement parser = match peek parser with
     | Some While -> parse_while parser
     | Some Return -> parse_return parser
     | Some x when starts_declaration x -> parse_declaration parser
-    | Some x when starts_assignment x -> parse_assignment parser
+    | Some x when starts_assignment parser -> ExprStmt (parse_assignment parser)
     | _ -> raise (Parse_error ("Expected statement", get_err_pos parser))
 
 (*
- *)
-and parse_compound_statements parser =
-
-(*
-    body = expr*
+    body = ( statement )*
  *)
 and parse_body parser =
-    let rec loop ast = match peek parser with
-        | Some tok when starts_expr tok ->
-                let expr = parse_expr parser in
-                loop (expr :: ast)
-        | Some tok when tok != Lexing_types.EOF -> raise (Parse_error ("Expected start of expression but found " ^ string_of_token tok, get_err_pos parser))
-        | _ ->
-                List.rev ast
+    let rec loop ast =
+        if not (peek parser = Some EOF) then (
+            let stmt = parse_statement parser in
+            loop (stmt :: ast))
+        else
+            ast
     in
-        loop []
+        List.rev (loop [])
 
 let parse parser = parse_body parser
