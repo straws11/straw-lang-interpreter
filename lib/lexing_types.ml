@@ -35,7 +35,7 @@ type token_kind =
 
     (* keywords *)
     | And
-    | Fun
+    | Fn
     | For
     | If
     | Else
@@ -79,7 +79,7 @@ let string_of_token token_type = match token_type with
     | Number x -> "Number(" ^ string_of_float x ^ ")"
     | Boolean x -> "Boolean(" ^ string_of_bool x ^ ")"
     | And -> "And"
-    | Fun -> "Fun"
+    | Fn -> "Fn"
     | For -> "For"
     | If -> "If"
     | Else -> "Else"
@@ -97,7 +97,7 @@ let string_of_token_list token_list =
 module StringMap = Map.Make(String)
 let reserved_words = StringMap.of_seq @@ List.to_seq [
     ("and", And);
-    ("fun", Fun);
+    ("fn", Fn);
     ("for", For);
     ("if", If);
     ("else", Else);

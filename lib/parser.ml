@@ -3,7 +3,8 @@ open Ast
 (*
 ----EBNF----
 
-    primary = NUMBER | STRING | BOOLEAN | IDENTIFIER | "(" expr ")"
+    function = "fn" "(" [ IDENTIFIER ( "," IDENTIFIER )* ] ")" block
+    primary = NUMBER | STRING | BOOLEAN | IDENTIFIER | function | "(" expr ")"
     expr_list = expr ( "," expr )*
     call = primary ( "(" expr_list ")" )*
     unary = ( "!" | "-" ) unary | call
@@ -138,9 +139,39 @@ let starts_expr parser = match peek parser with
 (* core *)
 
 (*
-    primary = NUMBER | STRING | BOOLEAN | IDENTIFIER | "(" expr ")"
+    function_params = [ IDENTIFIER ( "," IDENTIFIER )* ]
 *)
-let rec parse_primary parser =
+let rec parse_function_params parser =
+    let rec loop acc =
+        if consume parser Comma then
+            let id = expect_id parser in
+            loop (id :: acc)
+        else
+            acc
+    in
+
+    match peek parser with
+        | Some Identifier x ->
+                ignore (advance parser);
+                loop [x]
+        | _ -> 
+
+(*
+    function = "fn" "(" function_params ")" block
+*)
+and parse_function parser =
+    expect parser Fn "Shouldn't happen";
+    expect parser LParen "Shouldn't happen";
+    let params = parse_function_params parser in
+    expect parser RParen "Unclosed function params";
+    let block = parse_block parser in
+    FunExpr (params, block)
+
+
+(*
+    primary = NUMBER | STRING | BOOLEAN | IDENTIFIER | function | "(" expr ")"
+*)
+and parse_primary parser =
     print_endline ("got a primary" ^ string_of_token parser.tokens.(parser.pos).kind );
     match peek parser with
     | Some tok -> ignore (advance parser);
@@ -184,15 +215,17 @@ and parse_expr_list parser =
 *)
 and parse_call parser =
     let primary = parse_primary parser in
+    parse_call_tail parser primary
 
+and parse_call_tail parser inner =
     match peek parser with
         | Some LParen -> let expr_list =
             ignore (advance parser);
             print_endline ("going to parse expr list");
             parse_expr_list parser in
             expect parser RParen "Unclosed function call";
-            Call (primary, expr_list)
-        | _ -> primary
+            parse_call_tail parser (Call (inner, expr_list))
+        | _ -> inner
 
 (*
     unary = ( "!" | "-" ) unary

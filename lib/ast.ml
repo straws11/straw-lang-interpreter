@@ -19,7 +19,9 @@ type unary_op =
     | Not
     | Negate
 
-type expr =
+type block = statement list
+
+and expr =
     | NumLit of float
     | BoolLit of bool
     | StrLit of string
@@ -31,11 +33,11 @@ type expr =
     | Unary of unary_op * expr
 
     | Assign of string * expr
+    | FunExpr of string list * block
 
     | Group of expr
 
 
-type block = statement list
 
 and statement =
     | IfStmt of expr * block * block option (* conditional_expr then_block else_block *)
@@ -78,10 +80,9 @@ let rec string_of_expr depth expr =
     | Variable x -> "Variable(" ^ x ^ ")"
 
     | Call (expr, expr_list) -> "Call(\n"
-        ^ string_of_expr (depth + 1) expr ^ "\n"
-        ^ indent (depth + 1) ^ "[\n"
-        ^ String.concat ",\n" (List.map (string_of_expr (depth + 2)) expr_list) ^ "\n"
-        ^ indent (depth + 1) ^ "]\n"
+        ^ string_of_expr (depth + 1) expr ^ ",\n"
+        ^ indent (depth + 1) ^ "["
+        ^ String.concat ", " (List.map (string_of_expr 0) expr_list) ^ "]\n"
         ^ ind ^ ")"
 
     | Binary (expr1, bin_op, expr2) -> "Binary(\n"
@@ -98,6 +99,10 @@ let rec string_of_expr depth expr =
     | Assign (s, e) -> "Assign(\n"
         ^ indent (depth + 1) ^ s ^ "\n"
         ^ string_of_expr (depth + 1) e ^ "\n"
+        ^ ind ^ ")"
+
+    | FunExpr (params, b) -> "FunExpr(\n"
+        ^ indent (depth + 1) ^ "[" ^String.concat ", " params ^ "]\n"
         ^ ind ^ ")"
 
     | Group x -> "Group(\n"

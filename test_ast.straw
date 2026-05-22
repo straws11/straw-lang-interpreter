@@ -2,7 +2,7 @@ num big
 num number = big = 5
 if number < 5 {
 	number = 9
-	bigfun(a, b, c)
+	bigfun(a, b, c)(d)()
 } else {
 	num i = 0
 	while (x < 10) {
