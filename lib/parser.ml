@@ -4,20 +4,21 @@ open Ast
 ----EBNF----
 
     primary = NUMBER | STRING | BOOLEAN | IDENTIFIER | "(" expr ")"
-    call = primary ( "(" [ expr_list ] ")" )*
+    expr_list = expr ( "," expr )*
+    call = primary ( "(" expr_list ")" )*
     unary = ( "!" | "-" ) unary | call
     factor = unary ( ( "/" | "*" ) unary )*
     term = factor ( ( "+" | "-" ) factor )*
     comparison = term ( ( ">" | ">=" | "<" | "<=" | "!=" | "==" ) term )*
     assignment = IDENTIFIER "=" assignment | comparison
-    expr = assignment | comparison
+    expr = assignment
     block = "{" ( statement )* "}"
-    if = "if" expr "then" block [ "else" block ]
+    if = "if" expr block [ "else" block ]
     for_initializer = [ assignment | declaration ]
     for_condition = [ expr ]
     for_increment = [ expr ]
     for = "for" "(" for_initializer ";" for_condition ";" for_increment ")" block
-    while = "while" expr "do" block
+    while = "while" expr block
     return = "return" [ expr ]
     declaration = ( num | bool | str ) IDENTIFIER [ "=" expr ]
     statement = ( if | for | while | return | declaration | expr_stmt )
@@ -83,9 +84,9 @@ let advance parser = if parser.pos >= Array.length parser.tokens then
 
 (* peek and advance if expected, else nothing *)
 let consume parser expected = match peek parser with
-    | Some expected ->
-        ignore (advance parser);
-        true
+    | Some x when x = expected ->
+            ignore (advance parser);
+            true
     | _ -> false
 
 
@@ -159,10 +160,39 @@ let rec parse_primary parser =
     | None -> failwith "Unexpected end of input"
 
 (*
-    call = primary ( "(" [ expr_list ] ")" )*
+    expr_list = expr ( "," expr )*
 *)
-and parse_call parser = parse_primary parser (* TODO: this func *)
+and parse_expr_list parser =
+    let rec loop acc =
+        print_endline ("uno" ^ string_of_token parser.tokens.(parser.pos).kind);
+        if (consume parser Comma) then(
+            print_endline ("dos" ^ string_of_token parser.tokens.(parser.pos).kind);
+            match peek parser with
+                | Some x when starts_expr parser -> loop (parse_expr parser :: acc)
+                | _ -> raise (Parse_error ("Expected expression", get_err_pos parser))
+        )else(
+            print_endline ("nothing");
+            acc)
+    in
+    match peek parser with
+        | Some x when starts_expr parser -> List.rev (loop [parse_expr parser])
+        | _ -> []
 
+
+(*
+    call = primary ( "(" expr_list ")" )*
+*)
+and parse_call parser =
+    let primary = parse_primary parser in
+
+    match peek parser with
+        | Some LParen -> let expr_list =
+            ignore (advance parser);
+            print_endline ("going to parse expr list");
+            parse_expr_list parser in
+            expect parser RParen "Unclosed function call";
+            Call (primary, expr_list)
+        | _ -> primary
 
 (*
     unary = ( "!" | "-" ) unary
@@ -203,9 +233,7 @@ and parse_factor_tail parser left =
 *)
 and parse_term parser =
     let factor = parse_factor parser in
-    let temp = parse_term_tail parser factor in
-    print_endline ("parsed term.." ^ string_of_expr temp);
-    temp
+    parse_term_tail parser factor
 
 and parse_term_tail parser left =
     match peek parser with
@@ -223,9 +251,7 @@ and parse_term_tail parser left =
 *)
 and parse_comparison parser =
     let term = parse_term parser in
-    let temp = parse_comparison_tail parser term in
-    print_endline ("parsed comp: " ^ string_of_expr temp);
-    temp
+    parse_comparison_tail parser term
 
 
 and parse_comparison_tail parser left =
@@ -250,23 +276,21 @@ and parse_assignment parser =
                     ignore (advance parser);
                     ignore (advance parser);
                     let assignment = parse_assignment parser in
-                    let a = Assign (id, assignment) in
-                    print_endline ("the assign: " ^ string_of_expr a);
-                    a
+                    Assign (id, assignment)
                 | _ -> parse_comparison parser
                 end
         | _ -> parse_comparison parser
 
 (*
-    expr = assignment | comparison
+    expr = assignment
 *)
-and parse_expr parser =
-    match peek parser with
-        | Some Identifier _ -> begin match peek_next parser with
-            | Some Equal -> parse_assignment parser
-            | _ -> parse_comparison parser
-            end
-        | _ -> parse_comparison parser
+and parse_expr parser = parse_assignment parser
+    (* match peek parser with *)
+    (*     | Some Identifier _ -> begin match peek_next parser with *)
+    (*         | Some Equal -> parse_assignment parser *)
+    (*         | _ -> parse_comparison parser *)
+    (*         end *)
+    (*     | _ -> parse_comparison parser *)
 
 (*
     block = "{" ( statement )* "}"
@@ -283,7 +307,6 @@ and parse_block parser =
     expect parser LBrace "Expected '{'";
 
     let body = List.rev (loop []) in
-    print_endline ("done parsing the stmt block" ^ string_of_block body);
 
     expect parser RBrace "Expected '}'";
     body (* TODO: this needs some wrapper?? *)
@@ -295,7 +318,6 @@ and parse_block parser =
 and parse_if parser =
     expect parser If "Expected start of 'if'";
     let expr = parse_expr parser in
-    expect parser Then "Expected 'then'";
     let then_body = parse_block parser in
     match peek parser with
         | Some Else -> ignore (advance parser);
@@ -382,7 +404,6 @@ and parse_for parser =
 and parse_while parser =
     expect parser While "This shouldn't ever happen";
     let expr = parse_expr parser in
-    expect parser Do "Expected 'do'";
     WhileStmt (expr, parse_block parser)
 
 (*
@@ -426,7 +447,7 @@ and parse_statement parser = match peek parser with
     | Some While -> parse_while parser
     | Some Return -> parse_return parser
     | Some x when starts_declaration x -> parse_declaration parser
-    | Some x when starts_assignment parser -> ExprStmt (parse_assignment parser)
+    | Some x when starts_expr parser -> ExprStmt (parse_expr parser)
     | _ -> raise (Parse_error ("Expected statement", get_err_pos parser))
 
 (*

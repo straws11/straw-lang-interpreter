@@ -38,7 +38,6 @@ type token_kind =
     | Fun
     | For
     | If
-    | Then
     | Else
     | Or
     | Return
@@ -46,7 +45,6 @@ type token_kind =
     | Str
     | Bool
     | While
-    | Do
 
     | EOF
 
@@ -84,7 +82,6 @@ let string_of_token token_type = match token_type with
     | Fun -> "Fun"
     | For -> "For"
     | If -> "If"
-    | Then -> "Then"
     | Else -> "Else"
     | Or -> "Or"
     | Return -> "Return"
@@ -92,7 +89,6 @@ let string_of_token token_type = match token_type with
     | Str -> "Str"
     | Bool -> "Bool"
     | While -> "While"
-    | Do -> "Do"
     | EOF -> "EOF"
 
 let string_of_token_list token_list =
@@ -104,7 +100,6 @@ let reserved_words = StringMap.of_seq @@ List.to_seq [
     ("fun", Fun);
     ("for", For);
     ("if", If);
-    ("then", Then);
     ("else", Else);
     ("or", Or);
     ("return", Return);
@@ -112,5 +107,4 @@ let reserved_words = StringMap.of_seq @@ List.to_seq [
     ("str", Str);
     ("bool", Bool);
     ("while", While);
-    ("do", Do);
 ]

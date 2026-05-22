@@ -1,4 +1,11 @@
-while true do {
-	num myvar = 100
-	str myname = Dylan
+num big
+num number = big = 5
+if number < 5 {
+	number = 9
+	bigfun(a, b, c)
+} else {
+	num i = 0
+	while (x < 10) {
+		i = i + 1
+	}
 }

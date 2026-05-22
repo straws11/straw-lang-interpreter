@@ -36,7 +36,7 @@ let () =
     let ast = Parser.parse parser in
 
     let rec loop rem = match rem with
-        | h :: t -> Ast.string_of_statement h ^ loop t
+        | h :: t -> Ast.string_of_statement 0 h ^ "\n" ^ loop t
         | [] -> ""
     in
     let out = loop ast in
