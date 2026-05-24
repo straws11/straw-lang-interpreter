@@ -49,6 +49,8 @@ and statement =
     | FunDeclStmt of string * parameter list * data_type * block
     | ExprStmt of expr (* example foo(1,2) or print(x) are expressions but they are used as statements ofc *)
     | BlockStmt of block
+    (* TODO: temp remove *)
+    | PrintStmt of expr
 
 (* stringify *)
 let indent n = String.make (n * 2) ' '
@@ -184,5 +186,9 @@ and string_of_statement depth stmt =
 
         | BlockStmt b -> "BlockStmt(\n"
             ^ string_of_block (depth + 1) b ^ "\n"
+            ^ ind ^ ")"
+
+        | PrintStmt e -> "PrintStmt(\n"
+            ^ string_of_expr (depth + 1) e ^ "\n"
             ^ ind ^ ")"
 

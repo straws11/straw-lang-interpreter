@@ -25,7 +25,8 @@ open Ast
     return = "return" [ expr ]
     data_type = ( num | bool | str | func )
     declaration = data_type IDENTIFIER [ "=" expr ]
-    statement = ( if | for | while | return | declaration | function_decl | expr_stmt )
+    print = "print" "(" expr ")"
+    statement = ( if | for | while | return | declaration | function_decl | expr_stmt | print )
     body = ( statement )*
 *)
 
@@ -497,8 +498,20 @@ and parse_declaration parser =
 
     VarDeclStmt (data_type, id, init)
 
+(* TODO: remove, this will be part of std lib
+    print = "print" "(" expr ")"
+*)
+
+and parse_print parser =
+    expect parser Print "Shouldn't happen";
+    expect parser LParen "Expected '('";
+    let e = parse_expr parser in
+    expect parser RParen "Unclosed print, expected ')'";
+    PrintStmt e
+
+
 (*
-    statement = ( if | for | while | return | declaration | function_decl | expr_stmt )
+    statement = ( if | for | while | return | declaration | function_decl | expr_stmt | print )
  *)
 and parse_statement parser = match peek parser with
     | Some If -> parse_if parser
@@ -506,6 +519,7 @@ and parse_statement parser = match peek parser with
     | Some While -> parse_while parser
     | Some Return -> parse_return parser
     | Some Fn -> parse_function_decl parser
+    | Some Print -> parse_print parser
     | Some x when starts_declaration x -> parse_declaration parser
     | Some x when starts_expr parser -> ExprStmt (parse_expr parser)
     | _ -> raise (Parse_error ("Expected statement", get_err_pos parser))

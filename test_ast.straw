@@ -1,5 +1,21 @@
-str hi = fn (num ab, str c) -> str {num x = 5}(par)
+str hi = "Hello world!"
+num mynum = 89217890328321987139812
 
-fn dosmth(num a, num b) -> num {
-	return a + b
+print(mynum)
+if hi == "Hello world!" {
+    print(hi)
+} else {
+    print("hello from straws!")
+}
+
+num i = 0
+while (i < 5) {
+    print("hi")
+    print(i)
+    i = i + 1
+}
+
+for (num i = 0; i < 5; i = i + 1) {
+    print("hello")
+    print(i)
 }

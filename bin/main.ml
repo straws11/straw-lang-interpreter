@@ -42,4 +42,6 @@ let () =
     let out = loop ast in
     print_endline (out);
 
+    Interpreter.interpret ast
+
 
