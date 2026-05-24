@@ -109,7 +109,6 @@ let next_token lexer =
             | '}' -> Lexing_types.RBrace
             | ',' -> Lexing_types.Comma
             | '.' -> Lexing_types.Dot
-            | '-' -> Lexing_types.Minus
             | '+' -> Lexing_types.Plus
             | ';' -> Lexing_types.Semicolon
             | '/' -> Lexing_types.Slash
@@ -133,6 +132,11 @@ let next_token lexer =
                     Lexing_types.LessEqual
                 else
                     Lexing_types.Less
+
+            | '-' -> if match_char lexer '>' then
+                    Lexing_types.Arrow
+                else
+                    Lexing_types.Minus
 
             | '0'..'9' -> number x lexer
             | '"' -> str lexer

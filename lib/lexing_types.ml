@@ -11,7 +11,6 @@ type token_kind =
     | RBrace
     | Comma
     | Dot
-    | Minus
     | Plus
     | Semicolon
     | Slash
@@ -26,6 +25,8 @@ type token_kind =
     | GreaterEqual
     | Less
     | LessEqual
+    | Minus
+    | Arrow
 
     (* literals *)
     | Identifier of string
@@ -44,6 +45,7 @@ type token_kind =
     | Num
     | Str
     | Bool
+    | Func
     | While
 
     | EOF
@@ -61,7 +63,6 @@ let string_of_token token_type = match token_type with
     | RBrace -> "RBrace"
     | Comma -> "Comma"
     | Dot -> "Dot"
-    | Minus -> "Minus"
     | Plus -> "Plus"
     | Semicolon -> "Semicolon"
     | Slash -> "Slash"
@@ -74,6 +75,8 @@ let string_of_token token_type = match token_type with
     | GreaterEqual -> "GreaterEqual"
     | Less -> "Less"
     | LessEqual -> "LessEqual"
+    | Minus -> "Minus"
+    | Arrow -> "Arrow"
     | Identifier x -> "Identifier(" ^ x ^ ")"
     | String x -> "String(" ^ x ^ ")"
     | Number x -> "Number(" ^ string_of_float x ^ ")"
@@ -88,6 +91,7 @@ let string_of_token token_type = match token_type with
     | Num -> "Num"
     | Str -> "Str"
     | Bool -> "Bool"
+    | Func -> "Func"
     | While -> "While"
     | EOF -> "EOF"
 
@@ -106,5 +110,6 @@ let reserved_words = StringMap.of_seq @@ List.to_seq [
     ("num", Num);
     ("str", Str);
     ("bool", Bool);
+    ("func", Func);
     ("while", While);
 ]

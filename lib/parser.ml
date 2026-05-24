@@ -3,8 +3,10 @@ open Ast
 (*
 ----EBNF----
 
-    function = "fn" "(" [ IDENTIFIER ( "," IDENTIFIER )* ] ")" block
-    primary = NUMBER | STRING | BOOLEAN | IDENTIFIER | function | "(" expr ")"
+    function_params = [ data_type IDENTIFIER ( "," data_type IDENTIFIER )* ]
+    function_expr = "fn" "(" function_params ")" "->" data_type block
+    function_decl = "fn" IDENTIFIER "(" function_params ")" "->" data_type block
+    primary = NUMBER | STRING | BOOLEAN | IDENTIFIER | function_expr | "(" expr ")"
     expr_list = expr ( "," expr )*
     call = primary ( "(" expr_list ")" )*
     unary = ( "!" | "-" ) unary | call
@@ -21,8 +23,9 @@ open Ast
     for = "for" "(" for_initializer ";" for_condition ";" for_increment ")" block
     while = "while" expr block
     return = "return" [ expr ]
-    declaration = ( num | bool | str ) IDENTIFIER [ "=" expr ]
-    statement = ( if | for | while | return | declaration | expr_stmt )
+    data_type = ( num | bool | str | func )
+    declaration = data_type IDENTIFIER [ "=" expr ]
+    statement = ( if | for | while | return | declaration | function_decl | expr_stmt )
     body = ( statement )*
 *)
 
@@ -118,11 +121,11 @@ let expect_id parser = match advance parser with
 
 (* TODO: should this be called starts_call?? *)
 let starts_primary tok = match tok with
-    | Identifier _ | String _ | Boolean _ | Number _ | LParen -> true
+    | Identifier _ | String _ | Boolean _ | Number _ | Fn | LParen -> true
     | _ -> false
 
 let starts_declaration tok = match tok with
-    | Num | Str | Bool -> true
+    | Num | Str | Bool | Func -> true
     | _ -> false
 
 let starts_assignment parser = match peek parser with
@@ -135,60 +138,78 @@ let starts_expr parser = match peek parser with
     | Some Bang | Some Minus -> true
     | _ -> false
 
-
 (* core *)
 
 (*
-    function_params = [ IDENTIFIER ( "," IDENTIFIER )* ]
+    function_params = [ data_type IDENTIFIER ( "," data_type IDENTIFIER )* ]
 *)
 let rec parse_function_params parser =
     let rec loop acc =
         if consume parser Comma then
+            let dt = parse_data_type parser in
             let id = expect_id parser in
-            loop (id :: acc)
+            loop ((dt, id) :: acc)
         else
-            acc
+            List.rev acc
     in
 
     match peek parser with
-        | Some Identifier x ->
-                ignore (advance parser);
-                loop [x]
-        | _ -> 
+        | Some x when starts_declaration x ->
+                let dt = parse_data_type parser in
+                let id = expect_id parser in
+                loop [(dt, id)]
+        | _ -> []
 
 (*
-    function = "fn" "(" function_params ")" block
+    function_expr = "fn" "(" function_params ")" "->" data_type block
 *)
-and parse_function parser =
+and parse_function_expr parser =
     expect parser Fn "Shouldn't happen";
-    expect parser LParen "Shouldn't happen";
+    expect parser LParen "Expected '('";
     let params = parse_function_params parser in
     expect parser RParen "Unclosed function params";
+    expect parser Arrow "Expected '->' for return type";
+    let dt = parse_data_type parser in
     let block = parse_block parser in
-    FunExpr (params, block)
+    FunExpr (params, dt, block)
+
+(*
+    function_decl = "fn" IDENTIFIER "(" function_params ")" "->" data_type block
+*)
+and parse_function_decl parser =
+    expect parser Fn "Shouldn't happen";
+    let id = expect_id parser in
+    expect parser LParen "Expected '('";
+    let params = parse_function_params parser in
+    expect parser RParen "Unclosed function params";
+    expect parser Arrow "Expect '->' for return type";
+    let dt = parse_data_type parser in
+    let block = parse_block parser in
+    FunDeclStmt (id, params, dt, block)
 
 
 (*
-    primary = NUMBER | STRING | BOOLEAN | IDENTIFIER | function | "(" expr ")"
+    primary = NUMBER | STRING | BOOLEAN | IDENTIFIER | function_expr | "(" expr ")"
 *)
 and parse_primary parser =
     print_endline ("got a primary" ^ string_of_token parser.tokens.(parser.pos).kind );
     match peek parser with
-    | Some tok -> ignore (advance parser);
-        begin match tok with
-        | String x -> StrLit x
-        | Number x -> NumLit x
-        | Boolean x -> BoolLit x
-        | Identifier x -> Variable x
-        | LParen ->
-            let expr = parse_expr parser in
-            expect parser RParen "Expected ')' after expression";
-            Group expr
+        | Some Fn -> parse_function_expr parser
+        | Some tok -> ignore (advance parser);
+            begin match tok with
+            | String x -> StrLit x
+            | Number x -> NumLit x
+            | Boolean x -> BoolLit x
+            | Identifier x -> Variable x
+            | LParen ->
+                let expr = parse_expr parser in
+                expect parser RParen "Expected ')' after expression";
+                Group expr
 
-        | x -> raise (Parse_error ("Expected literal or variable, found " ^ string_of_token x,
-                get_err_pos parser))
-        end (* match on tok.kind *)
-    | None -> failwith "Unexpected end of input"
+            | x -> raise (Parse_error ("Expected literal or variable, found " ^ string_of_token x,
+                    get_err_pos parser))
+            end (* match on tok.kind *)
+        | None -> failwith "Unexpected end of input"
 
 (*
     expr_list = expr ( "," expr )*
@@ -450,17 +471,22 @@ and parse_return parser =
             ReturnStmt (Some expr)
 
         | _ -> ReturnStmt None
-
 (*
-    declaration = ( num | bool | str ) IDENTIFIER [ "=" expr ]
+    data_type = ( num | bool | str | func )
 *)
-and parse_declaration parser =
-    let data_type = match advance parser with
+and parse_data_type parser =
+    match advance parser with
         | Some Num -> TNumber
         | Some Bool -> TBoolean
         | Some Str -> TString
-        | _ -> raise (Parse_error ("Shouldn't be possible", get_err_pos parser))
-    in
+        | Some Func -> TFunction
+        | _ -> raise (Parse_error ("Data type expected", get_err_pos parser))
+
+(*
+    declaration = data_type IDENTIFIER [ "=" expr ]
+*)
+and parse_declaration parser =
+    let data_type = parse_data_type parser in
     let id = expect_id parser in
     let init = match peek parser with
         | Some Equal ->
@@ -472,13 +498,14 @@ and parse_declaration parser =
     VarDeclStmt (data_type, id, init)
 
 (*
-    statement = ( if | for | while | return | declaration | expr_stmt )
+    statement = ( if | for | while | return | declaration | function_decl | expr_stmt )
  *)
 and parse_statement parser = match peek parser with
     | Some If -> parse_if parser
     | Some For -> parse_for parser
     | Some While -> parse_while parser
     | Some Return -> parse_return parser
+    | Some Fn -> parse_function_decl parser
     | Some x when starts_declaration x -> parse_declaration parser
     | Some x when starts_expr parser -> ExprStmt (parse_expr parser)
     | _ -> raise (Parse_error ("Expected statement", get_err_pos parser))

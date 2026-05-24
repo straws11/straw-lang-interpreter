@@ -2,6 +2,7 @@ type data_type =
     | TNumber
     | TBoolean
     | TString
+    | TFunction
 
 type binary_op =
     | Add
@@ -19,6 +20,8 @@ type unary_op =
     | Not
     | Negate
 
+type parameter = data_type * string
+
 type block = statement list
 
 and expr =
@@ -33,10 +36,9 @@ and expr =
     | Unary of unary_op * expr
 
     | Assign of string * expr
-    | FunExpr of string list * block
+    | FunExpr of parameter list * data_type * block
 
     | Group of expr
-
 
 
 and statement =
@@ -44,15 +46,18 @@ and statement =
     | WhileStmt of expr * block
     | ReturnStmt of expr option
     | VarDeclStmt of data_type * string * expr option
+    | FunDeclStmt of string * parameter list * data_type * block
     | ExprStmt of expr (* example foo(1,2) or print(x) are expressions but they are used as statements ofc *)
     | BlockStmt of block
 
 (* stringify *)
 let indent n = String.make (n * 2) ' '
+
 let string_of_data_type dt = match dt with
     | TNumber -> "TNumber"
     | TBoolean -> "TBoolean"
     | TString -> "TString"
+    | TFunction -> "TFunction"
 
 let string_of_binary_op op = match op with
     | Add -> "+"
@@ -70,10 +75,19 @@ let string_of_unary_op op = match op with
     | Not -> "!"
     | Negate -> "-"
 
-let rec string_of_expr depth expr =
-    let ind = indent depth in
+let rec string_of_param_list depth params =
+    let rec loop acc rest = match rest with
+        | (dt, id) :: t -> let str =
+            indent (depth + 1)  ^ string_of_data_type dt ^ " " ^ id in
+            loop (str :: acc) t
+        | [] -> String.concat "\n" (List.rev acc) ^ "\n"
+    in
+    indent depth ^ "[\n" ^ loop [] params ^ indent (depth) ^ "]\n"
 
-    ind ^ match expr with
+let rec string_of_expr depth expr =
+    let ind = indent (depth + 1) in
+
+    indent depth ^ match expr with
     | NumLit x -> "NumLit(" ^ string_of_float x ^ ")"
     | BoolLit x -> "BoolLit(" ^ string_of_bool x ^ ")"
     | StrLit x -> "StrLit(" ^ x ^ ")"
@@ -81,38 +95,40 @@ let rec string_of_expr depth expr =
 
     | Call (expr, expr_list) -> "Call(\n"
         ^ string_of_expr (depth + 1) expr ^ ",\n"
-        ^ indent (depth + 1) ^ "["
+        ^ ind ^ "["
         ^ String.concat ", " (List.map (string_of_expr 0) expr_list) ^ "]\n"
-        ^ ind ^ ")"
+        ^ indent depth ^ ")"
 
     | Binary (expr1, bin_op, expr2) -> "Binary(\n"
         ^ string_of_expr (depth + 1) expr1 ^ "\n"
-        ^ indent (depth + 1) ^ string_of_binary_op bin_op ^ "\n"
+        ^ ind ^ string_of_binary_op bin_op ^ "\n"
         ^ string_of_expr (depth + 1) expr2 ^ "\n"
-        ^ ind ^ ")"
+        ^ indent depth ^ ")"
 
     | Unary (un_op, expr) -> "Unary(\n"
         ^ string_of_unary_op un_op
         ^ string_of_expr (depth + 1) expr ^ "\n"
-        ^ ind ^ ")"
+        ^ indent depth ^ ")"
 
     | Assign (s, e) -> "Assign(\n"
-        ^ indent (depth + 1) ^ s ^ "\n"
+        ^ ind ^ s ^ "\n"
         ^ string_of_expr (depth + 1) e ^ "\n"
-        ^ ind ^ ")"
+        ^ indent depth ^ ")"
 
-    | FunExpr (params, b) -> "FunExpr(\n"
-        ^ indent (depth + 1) ^ "[" ^String.concat ", " params ^ "]\n"
-        ^ ind ^ ")"
+    | FunExpr (params, return_type, b) -> "FunExpr(\n"
+        ^ string_of_param_list (depth + 1) params
+        ^ ind ^ string_of_data_type return_type ^ "\n"
+        ^ string_of_block (depth + 1) b ^ "\n"
+        ^ indent depth ^ ")"
 
     | Group x -> "Group(\n"
         ^ string_of_expr (depth + 1) x ^ "\n"
         ^ ind ^ ")"
 
 
-let rec string_of_block depth block =
+and string_of_block depth block =
     let ind = indent depth in
-    "[\n"
+    ind ^ "[\n"
     ^ String.concat ",\n" (List.map (string_of_statement (depth + 1)) block) ^ "\n"
     ^ ind ^ "]"
 
@@ -136,7 +152,7 @@ and string_of_statement depth stmt =
 
         | WhileStmt (e, b) -> "While(\n"
             ^ string_of_expr (depth + 1) e ^ "\n"
-            ^ indent (depth + 1) ^ string_of_block (depth + 1) b ^ "\n"
+            ^ string_of_block (depth + 1) b ^ "\n"
             ^ ind ^ ")"
 
         | ReturnStmt eo -> "Return(\n"
@@ -144,7 +160,7 @@ and string_of_statement depth stmt =
                 | Some e -> string_of_expr (depth + 1) e ^ "\n"
                 | None -> ""
             end
-            ^ ind ^ "\n)"
+            ^ ind ^ ")"
 
         | VarDeclStmt (dt, s, eo) -> "VarDecl(\n"
             ^ indent (depth + 1) ^ string_of_data_type dt ^ " " ^ s ^ "\n"
@@ -153,6 +169,14 @@ and string_of_statement depth stmt =
                 | None -> ""
                 end
             ^ ind ^ ")"
+
+        | FunDeclStmt (name, params, return_type, block) -> "FunDeclStmt(\n"
+            ^ indent (depth + 1) ^ name ^ ",\n"
+            ^ string_of_param_list (depth + 1) params
+            ^ indent (depth + 1) ^ string_of_data_type return_type ^ ",\n"
+            ^ string_of_block (depth + 1) block ^ "\n"
+            ^ ind ^ ")"
+
 
         | ExprStmt e -> "ExprStmt(\n"
             ^ string_of_expr (depth + 1) e ^ "\n"
