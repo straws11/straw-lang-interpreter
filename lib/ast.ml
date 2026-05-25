@@ -36,7 +36,7 @@ and expr =
     | Unary of unary_op * expr
 
     | Assign of string * expr
-    | FunExpr of parameter list * data_type * block
+    | FunExpr of parameter list * data_type option * block
 
     | Group of expr
 
@@ -46,7 +46,7 @@ and statement =
     | WhileStmt of expr * block
     | ReturnStmt of expr option
     | VarDeclStmt of data_type * string * expr option
-    | FunDeclStmt of string * parameter list * data_type * block
+    | FunDeclStmt of string * parameter list * data_type option * block
     | ExprStmt of expr (* example foo(1,2) or print(x) are expressions but they are used as statements ofc *)
     | BlockStmt of block
     (* TODO: temp remove *)
@@ -119,7 +119,9 @@ let rec string_of_expr depth expr =
 
     | FunExpr (params, return_type, b) -> "FunExpr(\n"
         ^ string_of_param_list (depth + 1) params
-        ^ ind ^ string_of_data_type return_type ^ "\n"
+        ^ (match return_type with
+            | Some rt -> ind ^ string_of_data_type rt ^ "\n"
+            | None -> "")
         ^ string_of_block (depth + 1) b ^ "\n"
         ^ indent depth ^ ")"
 
@@ -175,7 +177,9 @@ and string_of_statement depth stmt =
         | FunDeclStmt (name, params, return_type, block) -> "FunDeclStmt(\n"
             ^ indent (depth + 1) ^ name ^ ",\n"
             ^ string_of_param_list (depth + 1) params
-            ^ indent (depth + 1) ^ string_of_data_type return_type ^ ",\n"
+            ^ (match return_type with
+                | Some rt -> indent (depth + 1) ^ string_of_data_type rt ^ ",\n"
+                | None -> "")
             ^ string_of_block (depth + 1) block ^ "\n"
             ^ ind ^ ")"
 

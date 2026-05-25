@@ -94,10 +94,14 @@ let identifier cur_char lexer =
     in
     let accumulated = loop [cur_char] in
     let ident = string_of_rev_char_list accumulated in
-
-    match Lexing_types.StringMap.find_opt ident Lexing_types.reserved_words with
-        | Some tok -> tok
-        | None -> Identifier ident
+    if ident = "true" then
+        Lexing_types.Boolean true
+    else if ident = "false" then
+        Lexing_types.Boolean false
+    else
+        match Lexing_types.StringMap.find_opt ident Lexing_types.reserved_words with
+            | Some tok -> tok
+            | None -> Identifier ident
 
 
 

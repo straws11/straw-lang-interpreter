@@ -1,21 +1,14 @@
-str hi = "Hello world!"
-num mynum = 89217890328321987139812
+num theNum = 5
 
-print(mynum)
-if hi == "Hello world!" {
-    print(hi)
-} else {
-    print("hello from straws!")
+if true {
+    print("inside")
+    print(theNum)
 }
 
-num i = 0
-while (i < 5) {
-    print("hi")
-    print(i)
-    i = i + 1
-}
+print("outside")
+print(theNum)
 
-for (num i = 0; i < 5; i = i + 1) {
-    print("hello")
-    print(i)
-}
+//for (num i = 0; i < 5; i = i + 1) {
+//    print("hello")
+//    print(i)
+//}

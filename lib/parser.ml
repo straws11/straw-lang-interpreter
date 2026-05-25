@@ -4,8 +4,8 @@ open Ast
 ----EBNF----
 
     function_params = [ data_type IDENTIFIER ( "," data_type IDENTIFIER )* ]
-    function_expr = "fn" "(" function_params ")" "->" data_type block
-    function_decl = "fn" IDENTIFIER "(" function_params ")" "->" data_type block
+    function_expr = "fn" "(" function_params ")" [ "->" data_type ] block
+    function_decl = "fn" IDENTIFIER "(" function_params ")" [ "->" data_type ] block
     primary = NUMBER | STRING | BOOLEAN | IDENTIFIER | function_expr | "(" expr ")"
     expr_list = expr ( "," expr )*
     call = primary ( "(" expr_list ")" )*
@@ -162,20 +162,23 @@ let rec parse_function_params parser =
         | _ -> []
 
 (*
-    function_expr = "fn" "(" function_params ")" "->" data_type block
+    function_expr = "fn" "(" function_params ")" [ "->" data_type ] block
 *)
 and parse_function_expr parser =
     expect parser Fn "Shouldn't happen";
     expect parser LParen "Expected '('";
     let params = parse_function_params parser in
     expect parser RParen "Unclosed function params";
-    expect parser Arrow "Expected '->' for return type";
-    let dt = parse_data_type parser in
+    let dt = if consume parser Arrow then
+        Some (parse_data_type parser)
+    else
+        None
+    in
     let block = parse_block parser in
     FunExpr (params, dt, block)
 
 (*
-    function_decl = "fn" IDENTIFIER "(" function_params ")" "->" data_type block
+    function_decl = "fn" IDENTIFIER "(" function_params ")" [ "->" data_type ] block
 *)
 and parse_function_decl parser =
     expect parser Fn "Shouldn't happen";
@@ -183,11 +186,13 @@ and parse_function_decl parser =
     expect parser LParen "Expected '('";
     let params = parse_function_params parser in
     expect parser RParen "Unclosed function params";
-    expect parser Arrow "Expect '->' for return type";
-    let dt = parse_data_type parser in
+    let dt = if consume parser Arrow then
+        Some (parse_data_type parser)
+    else
+        None
+    in
     let block = parse_block parser in
     FunDeclStmt (id, params, dt, block)
-
 
 (*
     primary = NUMBER | STRING | BOOLEAN | IDENTIFIER | function_expr | "(" expr ")"
@@ -210,7 +215,7 @@ and parse_primary parser =
             | x -> raise (Parse_error ("Expected literal or variable, found " ^ string_of_token x,
                     get_err_pos parser))
             end (* match on tok.kind *)
-        | None -> failwith "Unexpected end of input"
+        | None -> raise (Parse_error ("Unexpected end of input", get_err_pos parser))
 
 (*
     expr_list = expr ( "," expr )*
@@ -223,9 +228,8 @@ and parse_expr_list parser =
             match peek parser with
                 | Some x when starts_expr parser -> loop (parse_expr parser :: acc)
                 | _ -> raise (Parse_error ("Expected expression", get_err_pos parser))
-        )else(
-            print_endline ("nothing");
-            acc)
+        )else
+            acc
     in
     match peek parser with
         | Some x when starts_expr parser -> List.rev (loop [parse_expr parser])
@@ -340,12 +344,6 @@ and parse_assignment parser =
     expr = assignment
 *)
 and parse_expr parser = parse_assignment parser
-    (* match peek parser with *)
-    (*     | Some Identifier _ -> begin match peek_next parser with *)
-    (*         | Some Equal -> parse_assignment parser *)
-    (*         | _ -> parse_comparison parser *)
-    (*         end *)
-    (*     | _ -> parse_comparison parser *)
 
 (*
     block = "{" ( statement )* "}"
@@ -364,7 +362,7 @@ and parse_block parser =
     let body = List.rev (loop []) in
 
     expect parser RBrace "Expected '}'";
-    body (* TODO: this needs some wrapper?? *)
+    body
 
 
 (*
@@ -454,7 +452,7 @@ and parse_for parser =
 
 
 (*
-    while = "while" expr "do" block
+    while = "while" expr block
 *)
 and parse_while parser =
     expect parser While "This shouldn't ever happen";
