@@ -30,7 +30,7 @@ let types_match t1 t2 = match t1, t2 with
 let lookup env var =
     let rec loop scope =
         print_env scope;
-        let item = Hashtbl.find_opt env.tbl var in
+        let item = Hashtbl.find_opt scope.tbl var in
         match item with
             | Some Some x -> Some (Some x) (* found & has value *)
             | Some None -> Some None (* found but no assigned value *)
@@ -74,7 +74,7 @@ let rec apply_function env (func: function_value) (args: value list) =
             raise (Type_error "Argument type doesn't match parameter type")
     )) args param_types;
 
-    interpret_block (Some env) func.body;
+    interpret_block env func.body;
     (* TODO: implement some resolution to the return value?? *)
     VNumber 3.4
 
@@ -82,11 +82,10 @@ and interpret_while env expr body =
     let rec run_loop () =
         let e = interpret_expr env expr in
         match e with
-            | VBoolean b ->
-                if b then (
-                    interpret_block (Some env) body;
-                    run_loop ()
-                )
+            | VBoolean true ->
+                interpret_block env body;
+                run_loop ()
+            | VBoolean false -> ()
 
             | _ -> raise (Type_error "Expression should be of type boolean")
     in
@@ -96,10 +95,10 @@ and interpret_if env expr body else_body =
     match interpret_expr env expr with
         | VBoolean b ->
             if b then
-                interpret_block (Some env) body
+                interpret_block env body
             else
                 begin match else_body with
-                | Some eb -> interpret_block (Some env) eb;
+                | Some eb -> interpret_block env eb;
                 | None -> ()
                 end
 
@@ -265,7 +264,7 @@ and interpret_statement env stmt = match stmt with
     | ExprStmt expr -> ignore (interpret_expr env expr);
 
     (* TODO: this is where the env stuff is necessary too *)
-    | BlockStmt body -> interpret_block (Some env) body
+    | BlockStmt body -> interpret_block env body
 
     (* TODO: temp remove *)
     | PrintStmt expr ->
@@ -285,16 +284,23 @@ and interpret_block env (ast: block): unit =
     in
 
     let new_scope = {
-            outer = env;
+            outer = Some env;
             tbl = Hashtbl.create 11;
     }
     in
-    (match env with
-    | Some e -> print_env e
-    | None -> ());
-    loop new_scope ast
+    loop new_scope ast;
+    print_env env
 
 
 and interpret ast =
-    interpret_block None ast
+    let rec loop scope rem = match rem with
+        | h :: t -> interpret_statement scope h; loop scope t
+        | [] -> ()
+    in
+    let init_scope = {
+            outer = None;
+            tbl = Hashtbl.create 11;
+    }
+    in
+    loop init_scope ast
 

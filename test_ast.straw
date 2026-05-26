@@ -1,10 +1,14 @@
 num theNum = 5
+str words = "stringy"
+bool flag = false
 
 if true {
     print("inside")
     print(theNum)
+    str hi = "hello world"
 }
 
+print(hi)
 print("outside")
 print(theNum)
 
@@ -12,3 +16,8 @@ print(theNum)
 //    print("hello")
 //    print(i)
 //}
+func clos = fn (num aa, str b) {}
+
+fn dothing(num useless) -> num {
+    return useless + 5
+}

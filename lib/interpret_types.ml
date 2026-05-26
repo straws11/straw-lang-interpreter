@@ -38,7 +38,7 @@ type environment = {
 let rec print_env env =
         let rec loop level scope =
                 print_endline (String.make 3 '-' ^ "Environment " ^ string_of_int level ^ String.make 4 '-');
-                Hashtbl.iter (fun k v -> print_endline (k ^ " -> " ^ string_of_value_option v ^ "\n")) env.tbl;
+                Hashtbl.iter (fun k v -> print_endline (k ^ " -> " ^ string_of_value_option v ^ "\n")) scope.tbl;
                 print_endline (String.make 20 '-' ^ "\n");
                 match scope.outer with
                         | Some e -> loop (level + 1) e
