@@ -20,11 +20,7 @@ type unary_op =
     | Not
     | Negate
 
-type parameter = data_type * string
-
-type block = statement list
-
-and expr =
+type expr_kind =
     | NumLit of float
     | BoolLit of bool
     | StrLit of string
@@ -41,7 +37,7 @@ and expr =
     | Group of expr
 
 
-and statement =
+and statement_kind =
     | IfStmt of expr * block * block option (* conditional_expr then_block else_block *)
     | WhileStmt of expr * block
     | ReturnStmt of expr option
@@ -51,6 +47,21 @@ and statement =
     | BlockStmt of block
     (* TODO: temp remove *)
     | PrintStmt of expr
+
+and expr = {
+    kind: expr_kind;
+    pos: Lexing_types.position;
+}
+
+and statement = {
+    kind: statement_kind;
+    pos: Lexing_types.position;
+}
+
+and parameter = data_type * string
+
+and block = statement list
+
 
 (* stringify *)
 let indent n = String.make (n * 2) ' '
@@ -89,7 +100,7 @@ let rec string_of_param_list depth params =
 let rec string_of_expr depth expr =
     let ind = indent (depth + 1) in
 
-    indent depth ^ match expr with
+    indent depth ^ match expr.kind with
     | NumLit x -> "NumLit(" ^ string_of_float x ^ ")"
     | BoolLit x -> "BoolLit(" ^ string_of_bool x ^ ")"
     | StrLit x -> "StrLit(" ^ x ^ ")"
@@ -140,7 +151,7 @@ and string_of_statement depth stmt =
     let ind = indent depth in
 
     ind ^
-    match stmt with
+    match stmt.kind with
         | IfStmt (e, b, bo) -> "If(\n"
             ^ string_of_expr (depth + 1) e ^ ",\n"
             ^ indent (depth + 1) ^ "Then("

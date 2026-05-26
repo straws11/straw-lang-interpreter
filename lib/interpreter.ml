@@ -105,7 +105,7 @@ and interpret_if env expr body else_body =
         | _ -> raise (Type_error "Expression should be of type boolean")
 
 
-and interpret_expr env expr  = match expr with
+and interpret_expr env (expr: Ast.expr)  = match expr.kind with
     | NumLit x -> VNumber x
     | BoolLit x -> VBoolean x
     | StrLit x -> VString x
@@ -228,7 +228,7 @@ and interpret_unary op v = match op with
         | _ -> raise (Type_error "Can only negate numbers")
         end
 
-and interpret_statement env stmt = match stmt with
+and interpret_statement env (stmt: Ast.statement) = match stmt.kind with
     | IfStmt (expr, body, else_body) -> interpret_if env expr body else_body
 
     | WhileStmt (expr, body) -> interpret_while env expr body

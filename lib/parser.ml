@@ -95,7 +95,7 @@ let consume parser expected = match peek parser with
     | _ -> false
 
 
-let get_err_pos parser = parser.tokens.(parser.pos).pos
+let get_token_pos parser = parser.tokens.(parser.pos).pos
 
 let expect parser expected msg =
     (* Not sure why we would expect any toks with vals cause we need the vals.. *)
@@ -112,13 +112,13 @@ let expect parser expected msg =
         | Some tok when token_matches tok expected -> ignore (advance parser);
 
         | Some tok ->
-                raise (Parse_error (msg, get_err_pos parser))
+                raise (Parse_error (msg, get_token_pos parser))
         | None ->
-                raise (Parse_error ("Unexpected end of input", get_err_pos parser))
+                raise (Parse_error ("Unexpected end of input", get_token_pos parser))
 
 let expect_id parser = match advance parser with
     | Some Identifier x -> x
-    | _ -> raise (Parse_error ("Expected identifier", get_err_pos parser))
+    | _ -> raise (Parse_error ("Expected identifier", get_token_pos parser))
 
 (* TODO: should this be called starts_call?? *)
 let starts_primary tok = match tok with
@@ -164,7 +164,8 @@ let rec parse_function_params parser =
 (*
     function_expr = "fn" "(" function_params ")" [ "->" data_type ] block
 *)
-and parse_function_expr parser =
+and parse_function_expr parser : expr =
+    let position = get_token_pos parser in
     expect parser Fn "Shouldn't happen";
     expect parser LParen "Expected '('";
     let params = parse_function_params parser in
@@ -175,12 +176,13 @@ and parse_function_expr parser =
         None
     in
     let block = parse_block parser in
-    FunExpr (params, dt, block)
+    { kind = FunExpr (params, dt, block); pos = position }
 
 (*
     function_decl = "fn" IDENTIFIER "(" function_params ")" [ "->" data_type ] block
 *)
 and parse_function_decl parser =
+    let position = get_token_pos parser in
     expect parser Fn "Shouldn't happen";
     let id = expect_id parser in
     expect parser LParen "Expected '('";
@@ -192,7 +194,7 @@ and parse_function_decl parser =
         None
     in
     let block = parse_block parser in
-    FunDeclStmt (id, params, dt, block)
+    { kind = FunDeclStmt (id, params, dt, block); pos = position }
 
 (*
     primary = NUMBER | STRING | BOOLEAN | IDENTIFIER | function_expr | "(" expr ")"
@@ -201,8 +203,10 @@ and parse_primary parser =
     print_endline ("got a primary" ^ string_of_token parser.tokens.(parser.pos).kind );
     match peek parser with
         | Some Fn -> parse_function_expr parser
-        | Some tok -> ignore (advance parser);
-            begin match tok with
+        | Some tok ->
+            let position = get_token_pos parser in
+            ignore (advance parser);
+            { kind = begin match tok with
             | String x -> StrLit x
             | Number x -> NumLit x
             | Boolean x -> BoolLit x
@@ -213,9 +217,10 @@ and parse_primary parser =
                 Group expr
 
             | x -> raise (Parse_error ("Expected literal or variable, found " ^ string_of_token x,
-                    get_err_pos parser))
-            end (* match on tok.kind *)
-        | None -> raise (Parse_error ("Unexpected end of input", get_err_pos parser))
+                    get_token_pos parser))
+            end;
+            pos = position }
+        | None -> raise (Parse_error ("Unexpected end of input", get_token_pos parser))
 
 (*
     expr_list = expr ( "," expr )*
@@ -227,7 +232,7 @@ and parse_expr_list parser =
             print_endline ("dos" ^ string_of_token parser.tokens.(parser.pos).kind);
             match peek parser with
                 | Some x when starts_expr parser -> loop (parse_expr parser :: acc)
-                | _ -> raise (Parse_error ("Expected expression", get_err_pos parser))
+                | _ -> raise (Parse_error ("Expected expression", get_token_pos parser))
         )else
             acc
     in
@@ -245,26 +250,27 @@ and parse_call parser =
 
 and parse_call_tail parser inner =
     match peek parser with
-        | Some LParen -> let expr_list =
+        | Some LParen -> let position = get_token_pos parser in
+            let expr_list =
             ignore (advance parser);
-            print_endline ("going to parse expr list");
             parse_expr_list parser in
             expect parser RParen "Unclosed function call";
-            parse_call_tail parser (Call (inner, expr_list))
+            parse_call_tail parser ({ kind = Call (inner, expr_list); pos = position })
         | _ -> inner
 
 (*
     unary = ( "!" | "-" ) unary
         | call
 *)
-and parse_unary parser =
+and parse_unary parser : Ast.expr =
     match peek parser with
     | Some tok ->
         begin match get_unary_op tok with
             | Some op ->
+                    let position = get_token_pos parser in
                     ignore (advance parser);
                     let un = parse_unary parser in
-                    Unary (op, un)
+                    { kind = Unary (op, un); pos = position }
             | None -> parse_call parser
         end
     | None -> failwith "TODO Unexpected end of input. Expected unary."
@@ -280,9 +286,10 @@ and parse_factor_tail parser left =
     match peek parser with
         | Some tok -> begin match get_factor_op tok with
             | Some op ->
+                    let position = get_token_pos parser in
                     ignore (advance parser);
                     let right = parse_unary parser in
-                    parse_factor_tail parser (Binary (left, op, right))
+                    parse_factor_tail parser ({ kind = Binary (left, op, right); pos = position })
             | None -> left
             end
         | None -> left
@@ -298,9 +305,10 @@ and parse_term_tail parser left =
     match peek parser with
         | Some tok -> begin match get_term_op tok with
             | Some op ->
+                    let position = get_token_pos parser in
                     ignore (advance parser);
                     let right = parse_factor parser in
-                    parse_term_tail parser (Binary (left, op, right))
+                    parse_term_tail parser ({ kind = Binary (left, op, right); pos = position })
             | None -> left
             end
         | None -> left
@@ -317,9 +325,10 @@ and parse_comparison_tail parser left =
     match peek parser with
         | Some tok -> begin match get_comparison_op tok with
             | Some op ->
+                let position = get_token_pos parser in
                 ignore (advance parser);
                 let right = parse_term parser in
-                parse_comparison_tail parser (Binary (left, op, right))
+                parse_comparison_tail parser ({ kind = Binary (left, op, right); pos = position })
             | None -> left (* there is a token but it's not a comp op *)
             end
         | None -> left (* there is no token at all *)
@@ -327,15 +336,16 @@ and parse_comparison_tail parser left =
 (*
     assignment = IDENTIFIER "=" assignment | comparison
 *)
-and parse_assignment parser =
+and parse_assignment parser: Ast.expr =
     match peek parser with
         | Some Identifier id ->
             begin match peek_next parser with
                 | Some Equal ->
                     ignore (advance parser);
+                    let position = get_token_pos parser in
                     ignore (advance parser);
                     let assignment = parse_assignment parser in
-                    Assign (id, assignment)
+                    { kind = Assign (id, assignment); pos = position }
                 | _ -> parse_comparison parser
                 end
         | _ -> parse_comparison parser
@@ -354,7 +364,7 @@ and parse_block parser =
             | Some RBrace -> acc
             | Some x -> let stmt = parse_statement parser in
                 loop (stmt :: acc)
-            | None -> raise (Parse_error ("Block not closed", get_err_pos parser))
+            | None -> raise (Parse_error ("Block not closed", get_token_pos parser))
     in
 
     expect parser LBrace "Expected '{'";
@@ -369,15 +379,16 @@ and parse_block parser =
     if = "if" expr "then" block [ "else" block ]
 *)
 and parse_if parser =
+    let position = get_token_pos parser in
     expect parser If "Expected start of 'if'";
     let expr = parse_expr parser in
     let then_body = parse_block parser in
     match peek parser with
         | Some Else -> ignore (advance parser);
             let else_body = parse_block parser in
-            IfStmt (expr, then_body, Some else_body)
+            { kind = IfStmt (expr, then_body, Some else_body); pos = position }
 
-        | _ -> IfStmt (expr, then_body, None)
+        | _ -> { kind = IfStmt (expr, then_body, None); pos = position }
 
 (*
     for_initializer = [ assignment | declaration ]
@@ -385,7 +396,9 @@ and parse_if parser =
 and parse_for_initializer parser =
     match peek parser with
         | Some x when starts_declaration x -> Some (parse_declaration parser)
-        | Some x when starts_assignment parser -> Some (ExprStmt (parse_assignment parser))
+        | Some x when starts_assignment parser -> Some ({
+            kind = ExprStmt (parse_assignment parser); pos = get_token_pos parser
+            })
         | _ -> None
 
 (*
@@ -410,6 +423,7 @@ and parse_for_increment parser =
     for = "for" "(" for_initializer ";" for_condition ";" for_increment ")" block
 *)
 and parse_for parser =
+    let position = get_token_pos parser in
     expect parser For "Shouldn't be a problem";
     expect parser LParen "Expected '('";
 
@@ -423,7 +437,6 @@ and parse_for parser =
     expect parser RParen "Expected ')'";
 
     let body = parse_block parser in
-    print_endline ("do we get here");
 
     (* now we turn the for into a while:
        finit
@@ -433,12 +446,12 @@ and parse_for parser =
        }
     *)
     let while_body = match for_inc with
-        | Some inc -> body @ [ExprStmt inc]
+        | Some inc -> body @ [{ kind = ExprStmt inc; pos = position }]
         | None -> body
     in
     let while_cond = match for_cond with
         | Some cond -> cond
-        | None -> BoolLit true
+        | None -> { kind = BoolLit true; pos = position }
     in
 
     let block = match for_init with
@@ -446,30 +459,33 @@ and parse_for parser =
             | None -> []
     in
 
-    let block' = block @ [WhileStmt (while_cond, while_body)] in
+    let block' = block @ [{ kind = WhileStmt (while_cond, while_body); pos = position }] in
 
-    BlockStmt (block')
+    { kind = BlockStmt (block'); pos = position }
 
 
 (*
     while = "while" expr block
 *)
 and parse_while parser =
+    let position = get_token_pos parser in
     expect parser While "This shouldn't ever happen";
     let expr = parse_expr parser in
-    WhileStmt (expr, parse_block parser)
+    { kind = WhileStmt (expr, parse_block parser); pos = position }
 
 (*
     return = "return" [ expr ]
 *)
 and parse_return parser =
+    let unit_return_pos = get_token_pos parser in
     expect parser Return "This shouldn't ever happen";
     match peek parser with
         | Some x when starts_expr parser ->
+            let position = get_token_pos parser in
             let expr = parse_expr parser in
-            ReturnStmt (Some expr)
+            { kind = ReturnStmt (Some expr); pos = position }
 
-        | _ -> ReturnStmt None
+        | _ -> { kind = ReturnStmt None; pos = unit_return_pos }
 (*
     data_type = ( num | bool | str | func )
 *)
@@ -479,13 +495,14 @@ and parse_data_type parser =
         | Some Bool -> TBoolean
         | Some Str -> TString
         | Some Func -> TFunction
-        | _ -> raise (Parse_error ("Data type expected", get_err_pos parser))
+        | _ -> raise (Parse_error ("Data type expected", get_token_pos parser))
 
 (*
     declaration = data_type IDENTIFIER [ "=" expr ]
 *)
 and parse_declaration parser =
     let data_type = parse_data_type parser in
+    let position = get_token_pos parser in
     let id = expect_id parser in
     let init = match peek parser with
         | Some Equal ->
@@ -494,18 +511,19 @@ and parse_declaration parser =
         | _ -> None
     in
 
-    VarDeclStmt (data_type, id, init)
+    { kind = VarDeclStmt (data_type, id, init); pos = position }
 
 (* TODO: remove, this will be part of std lib
     print = "print" "(" expr ")"
 *)
 
 and parse_print parser =
+    let position = get_token_pos parser in
     expect parser Print "Shouldn't happen";
     expect parser LParen "Expected '('";
     let e = parse_expr parser in
     expect parser RParen "Unclosed print, expected ')'";
-    PrintStmt e
+    { kind = PrintStmt e; pos = position }
 
 
 (*
@@ -519,8 +537,10 @@ and parse_statement parser = match peek parser with
     | Some Fn -> parse_function_decl parser
     | Some Print -> parse_print parser
     | Some x when starts_declaration x -> parse_declaration parser
-    | Some x when starts_expr parser -> ExprStmt (parse_expr parser)
-    | _ -> raise (Parse_error ("Expected statement", get_err_pos parser))
+    | Some x when starts_expr parser -> {
+            kind = ExprStmt (parse_expr parser); pos = get_token_pos parser
+        }
+    | _ -> raise (Parse_error ("Expected statement", get_token_pos parser))
 
 (*
     body = ( statement )*

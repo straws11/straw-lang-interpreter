@@ -2,8 +2,8 @@ open Semantic_types
 
 let rec thing = ()
 
-and collect_statement sym_tbl stmt = match stmt with
-    | Ast.VarDeclStmt (_, name, Some FunExpr (params, return_op, _body)) ->
+and collect_statement sym_tbl (stmt: Ast.statement) = match stmt.kind with
+    | Ast.VarDeclStmt (_, name, Some { kind = FunExpr (params, return_op, _body); _ }) ->
         let param_dts = List.map (fun p -> fst p) params in
         let sym = FunctionSymbol (param_dts, return_op) in
         insert_st sym_tbl name sym
