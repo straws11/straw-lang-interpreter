@@ -8,7 +8,7 @@ let types_match t1 t2 = match t1, t2 with
     | Ast.TFunction, Ast.TFunction -> true
     | _ -> false
 
-let pretty_string_of_data_type dt =
+let str_of_dt dt =
     match dt with
         | Ast.TBoolean -> "bool"
         | Ast.TString -> "str"
@@ -20,7 +20,9 @@ let create_new_scope outer_scope = { outer = outer_scope; tbl = Hashtbl.create 1
 (* error *)
 exception Type_mismatch_error of string * string * Lexing_types.position
 
-exception Type_invalid_operator_error of string * string * Lexing_types.position
+exception Type_invalid_operator_error of string * string * string * Lexing_types.position
+
+exception Type_invalid_un_operator_error of string * string * Lexing_types.position
 
 exception Type_undeclared_error of string * Lexing_types.position
 
@@ -30,8 +32,11 @@ exception Type_custom_error of string * Lexing_types.position
         | Type_mismatch_error (found, expected, pos) ->
                 Some (Printf.sprintf "TypeError: found %s but expected %s at %d:%d" found expected pos.line pos.column)
 
-        | Type_invalid_operator_error (dt, op, pos) ->
+        | Type_invalid_un_operator_error (dt, op, pos) ->
                 Some (Printf.sprintf "TypeError: operator '%s' not applicable for type %s at %d:%d" op dt pos.line pos.column)
+
+        | Type_invalid_operator_error (dt, op, op2, pos) ->
+                Some (Printf.sprintf "TypeError: operator '%s' not applicable for types %s and %s at %d:%d" op dt op2 pos.line pos.column)
 
         | Type_undeclared_error (name, pos) ->
                 Some (Printf.sprintf "TypeError: variable %s not declared at %d:%d" name pos.line pos.column)
@@ -42,9 +47,9 @@ exception Type_custom_error of string * Lexing_types.position
         | _ -> None
     )
 
-let rec thing = ()
-
-and type_check_return st cur_return_type expr_op =
+let rec type_check_return st cur_return_type (ret: Ast.statement) =
+    match ret.kind with
+    | Ast.ReturnStmt expr_op ->
         let exp_type = match expr_op with
             | Some exp -> Some (type_check_expr st exp)
             | None -> None
@@ -52,61 +57,72 @@ and type_check_return st cur_return_type expr_op =
         begin match cur_return_type, exp_type with
             | Some return_type, Some ex ->
                 if not (types_match return_type ex) then
-                    raise (Type_mismatch_error (pretty_string_of_data_type ex, pretty_string_of_data_type return_type, ex.position))
+                    raise (Type_mismatch_error (str_of_dt ex, str_of_dt return_type, ret.pos))
                 else
                     ()
 
-            | Some return_type, None -> raise (Type_custom_error ("Missing return type of " ^ pretty_string_of_data_type return_type))
+            | Some return_type, None -> raise (Type_custom_error ("Missing return type of " ^ str_of_dt return_type, ret.pos))
 
-            | None, Some x -> raise (Type_custom_error ("Return is of type unit but found expression of type " ^ pretty_string_of_data_type x, x.pos))
+            | None, Some x -> raise (Type_custom_error ("Return is of type unit but found expression of type " ^ str_of_dt x, ret.pos))
             | None, None -> ()
         end
+    | _ -> failwith "Impossible"
 
 and get_var_type st var: (Ast.data_type option) = match lookup_st st var with
     | Some VariableSymbol x -> Some x
     | Some FunctionSymbol (_param_dts, return_dt_op) -> return_dt_op
     | None -> None
 
-and type_check_binary st exp1 bin_op exp2 =
-    let t1 = type_check_expr st exp1 in
-    let t2 = type_check_expr st exp2 in
-    if not (types_match t1 t2) then
-        raise (Type_invalid_operator_error (pretty_string_of_data_type t1, Ast.string_of_binary_op bin_op))
-    else
-        match t1 with
-            | TNumber ->
-                begin match bin_op with
-                    | Add | Sub | Mul | Div -> Ast.TNumber
-                    | _ -> Ast.TBoolean
-                end
-            | TBoolean ->
-                begin match bin_op with
-                    | Ast.EqualOp | Ast.NotEqual -> Ast.TBoolean
-                    | _ -> raise (Type_invalid_operator_error (pretty_string_of_data_type t1 , Ast.string_of_binary_op bin_op))
-                end
-
-            | TFunction -> raise (Type_invalid_operator_error (pretty_string_of_data_type t1, Ast.string_of_binary_op bin_op))
-
-            | TString ->
-                begin match bin_op with
-                    | Add -> Ast.TString
-                    | Div | Sub | Mul -> raise (Type_invalid_operator_error (pretty_string_of_data_type t1, Ast.string_of_binary_op bin_op))
-                    | _ -> Ast.TBoolean
-                end
-
-and type_check_unary st op exp = let exp_type = type_check_expr st exp in
-    match op with
-    | Ast.Not ->
-        if not (exp_type = TBoolean) then
-            raise (Type_invalid_operator_error (pretty_string_of_data_type exp_type, Ast.string_of_unary_op op))
+and type_check_binary st (binary: Ast.expr) =
+    match binary.kind with
+    | Ast.Binary (exp1, op, exp2) ->
+        let t1 = type_check_expr st exp1 in
+        let t2 = type_check_expr st exp2 in
+        if not (types_match t1 t2) then
+            raise (Type_invalid_operator_error (str_of_dt t1, Ast.string_of_binary_op op, str_of_dt t2, binary.pos))
         else
-            Ast.TBoolean
+            begin match t1 with
+                | TNumber ->
+                    begin match op with
+                        | Add | Sub | Mul | Div -> Ast.TNumber
+                        | _ -> Ast.TBoolean
+                    end
+                | TBoolean ->
+                    begin match op with
+                        | Ast.EqualOp | Ast.NotEqual -> Ast.TBoolean
+                        | _ -> raise (Type_invalid_operator_error (str_of_dt t1 , Ast.string_of_binary_op op, str_of_dt t2, binary.pos))
+                    end
 
-    | Ast.Negate ->
-        if not (exp_type = TNumber) then
-            raise (Type_invalid_operator_error (pretty_string_of_data_type exp_type, Ast.string_of_unary_op op))
-        else
-            Ast.TNumber
+                | TFunction -> raise (Type_invalid_operator_error (str_of_dt t1, Ast.string_of_binary_op op, str_of_dt t2, binary.pos))
+
+                | TString ->
+                    begin match op with
+                        | Add -> Ast.TString
+                        | Div | Sub | Mul -> raise (Type_invalid_operator_error (str_of_dt t1, Ast.string_of_binary_op op, str_of_dt t2, binary.pos))
+                        | _ -> Ast.TBoolean
+                    end
+                end
+    | _ -> failwith "Impossible"
+
+and type_check_unary st (unary: Ast.expr) =
+    match unary.kind with
+    | Ast.Unary (op, exp) ->
+        let exp_type = type_check_expr st unary in
+        begin match op with
+        | Ast.Not ->
+            if not (exp_type = TBoolean) then
+                raise (Type_invalid_un_operator_error (str_of_dt exp_type, Ast.string_of_unary_op op, unary.pos))
+            else
+                Ast.TBoolean
+
+        | Ast.Negate ->
+            if not (exp_type = TNumber) then
+                raise (Type_invalid_un_operator_error (str_of_dt exp_type, Ast.string_of_unary_op op, unary.pos))
+            else
+                Ast.TNumber
+                end
+    | _ -> failwith "Impossible"
+
 
 
 and type_check_expr st (exp: Ast.expr) = match exp.kind with
@@ -117,26 +133,26 @@ and type_check_expr st (exp: Ast.expr) = match exp.kind with
     | Variable x ->
         begin match get_var_type st x with
             | Some y -> y
-            | None -> raise (Type_undeclared_error x)
+            | None -> raise (Type_undeclared_error (x, exp.pos))
         end
 
     | Call (exp, params) -> type_check_expr st exp (* TODO: nesting of this and typecheck params *)
 
-    | Binary (exp1, bin_op, exp2) -> type_check_binary st exp1 bin_op exp2
+    | Binary (_, _, _) -> type_check_binary st exp
 
-    | Unary (un_op, exp) -> type_check_unary st un_op exp
+    | Unary (_, _) -> type_check_unary st exp
     | Assign (var, exp) ->
             let var_type = match get_var_type st var with
                 | Some x -> x
-                | None -> raise (Type_undeclared_error var)
+                | None -> raise (Type_undeclared_error (var, exp.pos))
             in
             let exp_type = type_check_expr st exp in
             if types_match var_type exp_type then
                 var_type
             else
-                raise (Type_mismatch_error (pretty_string_of_data_type exp_type, pretty_string_of_data_type var_type))
+                raise (Type_mismatch_error (str_of_dt exp_type, str_of_dt var_type, exp.pos))
 
-    | FunExpr (params, dt_opt, body) -> type_check_function_block st params dt_opt body; Ast.TFunction
+    | FunExpr (params, dt_option, body) -> type_check_function_block st params dt_option body; Ast.TFunction
     | Group exp -> type_check_expr st exp
 
 and type_check_statement st (cur_ret_type: Ast.data_type option) (stmt: Ast.statement) = match stmt.kind with
@@ -144,7 +160,7 @@ and type_check_statement st (cur_ret_type: Ast.data_type option) (stmt: Ast.stat
             let exp_type = type_check_expr st exp in
             begin match exp_type with
                 | Ast.TBoolean -> ()
-                | _ -> raise (Type_mismatch_error (pretty_string_of_data_type exp_type, pretty_string_of_data_type TBoolean))
+                | _ -> raise (Type_mismatch_error (str_of_dt exp_type, str_of_dt TBoolean, stmt.pos))
             end;
             type_check_block st cur_ret_type body;
 
@@ -157,12 +173,12 @@ and type_check_statement st (cur_ret_type: Ast.data_type option) (stmt: Ast.stat
             let exp_type = type_check_expr st exp in
             begin match exp_type with
                 | Ast.TBoolean -> ()
-                | _ -> raise (Type_mismatch_error (pretty_string_of_data_type exp_type, pretty_string_of_data_type Ast.TBoolean))
+                | _ -> raise (Type_mismatch_error (str_of_dt exp_type, str_of_dt Ast.TBoolean, stmt.pos))
             end;
 
             type_check_block st cur_ret_type body;
 
-    | ReturnStmt exp_op -> ignore (type_check_return st cur_ret_type exp_op);
+    | ReturnStmt _ -> ignore (type_check_return st cur_ret_type stmt);
 
     | VarDeclStmt (dt, name, exp_op) ->
         insert_st st name (VariableSymbol dt);
@@ -171,12 +187,12 @@ and type_check_statement st (cur_ret_type: Ast.data_type option) (stmt: Ast.stat
                 if types_match dt exp_type then
                     ()
                 else
-                    raise (Type_mismatch_error (pretty_string_of_data_type dt, pretty_string_of_data_type exp_type))
+                    raise (Type_mismatch_error (str_of_dt dt, str_of_dt exp_type, exp.pos))
             | None -> ()
         end;
 
-    | FunDeclStmt (_name, params, return_type_op, body) -> (* most already logged by first pass *)
-            type_check_function_block st params return_type_op body;
+    | FunDeclStmt (_name, params, dt_option, body) -> (* most already logged by first pass *)
+            type_check_function_block st params dt_option body;
 
     | ExprStmt exp -> ignore (type_check_expr st exp);
 

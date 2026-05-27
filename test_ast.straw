@@ -6,7 +6,6 @@ if true {
     print("inside")
     print(theNum)
     str hi = "hello world"
-    str hi2 = 9
 }
 
 print("outside")
@@ -19,5 +18,5 @@ print(theNum)
 func clos = fn (num aa, str b) {}
 
 fn dothing(num useless) -> num {
-    return useless + 5
+    return useless + "hi"
 }
