@@ -31,7 +31,7 @@ let string_of_value_option v = match v with
         | None -> "None"
 
 type environment = {
-        mutable outer: environment option;
+        outer: environment option;
         tbl: (string, value option) Hashtbl.t;
 }
 

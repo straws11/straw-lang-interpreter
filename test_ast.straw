@@ -6,9 +6,9 @@ if true {
     print("inside")
     print(theNum)
     str hi = "hello world"
+    str hi2 = 9
 }
 
-print(hi)
 print("outside")
 print(theNum)
 
