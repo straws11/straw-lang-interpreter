@@ -26,7 +26,7 @@ let lookup_st cur_scope key =
     let rec loop scope =
         let item = Hashtbl.find_opt scope.tbl key in
         match item with
-            | Some x -> print_endline ("ahoy" ^ string_of_symbol x); item
+            | Some x -> item
             | None ->
                 begin match scope.outer with
                     | Some x -> loop x

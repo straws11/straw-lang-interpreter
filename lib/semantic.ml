@@ -173,19 +173,11 @@ and type_check_call st (exp: Ast.expr) =
 
     match exp.kind with
     | Call (expr, param_exprs) ->
-            print_st st "inside call type check";
             begin match expr with
             (* TODO: FunExpr should also be able to match `fn (str smth){}("hi")` *)
             | { kind = Variable x; _ } ->
-                let aaa = lookup_st st x in
-                begin match aaa with
-                    | Some x -> print_endline (string_of_symbol x)
-                    | _ -> print_endline ("aaaaa")
-                end;
-                begin match aaa with
+                begin match lookup_st st x with
                     | Some FunctionSymbol (param_dts, ret_dt_op) -> (
-                        print_endline ("so not here??");
-                        print_st st "inside some functionsymbol match";
                         loop st param_exprs param_dts;
                         begin match ret_dt_op with
                             | Some x -> x

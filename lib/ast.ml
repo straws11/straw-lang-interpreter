@@ -72,7 +72,13 @@ and block = statement list
 
 
 (* stringify *)
-let indent n = String.make (n * 2) ' '
+let indent depth = String.make (depth * 2) ' '
+
+let line depth s = indent depth ^ s
+
+let block depth lines = String.concat "\n" lines
+
+let render_list depth render xs = xs |> List.map (render depth) |> String.concat ",\n"
 
 let string_of_data_type dt = match dt with
     | TInteger -> "TInteger"
@@ -102,129 +108,187 @@ let string_of_logical_op op = match op with
     | AndOp -> "and"
     | OrOp -> "or"
 
-let rec string_of_param_list depth params =
-    let rec loop acc rest = match rest with
-        | (dt, id) :: t -> let str =
-            indent (depth + 1)  ^ string_of_data_type dt ^ " " ^ id in
-            loop (str :: acc) t
-        | [] -> String.concat "\n" (List.rev acc) ^ "\n"
-    in
-    indent depth ^ "[\n" ^ loop [] params ^ indent (depth) ^ "]\n"
+let string_of_param depth (dt, id) =
+    line depth (string_of_data_type dt ^ " " ^ id)
+
+let string_of_param_list depth params =
+    block depth (
+        line depth "[" ::
+        (List.map (string_of_param (depth + 1)) params) @
+        [line depth "]"]
+    )
+
 
 let rec string_of_expr depth expr =
-    let ind = indent (depth + 1) in
+    match expr.kind with
+    | IntLit x -> line depth ("IntLit(" ^ string_of_int x ^ ")")
+    | FloatLit x -> line depth ("FloatLit(" ^ string_of_float x ^ ")")
+    | BoolLit x -> line depth ("BoolLit(" ^ string_of_bool x ^ ")")
+    | StrLit x -> line depth ("StrLit(" ^ x ^ ")")
+    | Variable x -> line depth ("Variable(" ^ x ^ ")")
 
-    indent depth ^ match expr.kind with
-    | IntLit x -> "IntLit(" ^ string_of_int x ^ ")"
-    | FloatLit x -> "FloatLit(" ^ string_of_float x ^ ")"
-    | BoolLit x -> "BoolLit(" ^ string_of_bool x ^ ")"
-    | StrLit x -> "StrLit(" ^ x ^ ")"
-    | Variable x -> "Variable(" ^ x ^ ")"
+    | Call (callee, args) ->
+        block depth (
+            [
+                line depth "Call(";
+                string_of_expr (depth + 1) callee;
+                line (depth + 1) "Args[";
+            ]
+            @
+            List.map (string_of_expr (depth + 2)) args
+            @
+            [
+                line (depth + 1) "]";
+                line depth ")";
+            ]
+        )
 
-    | Call (expr, expr_list) -> "Call(\n"
-        ^ string_of_expr (depth + 1) expr ^ ",\n"
-        ^ ind ^ "["
-        ^ String.concat ", " (List.map (string_of_expr 0) expr_list) ^ "]\n"
-        ^ indent depth ^ ")"
+    | Unary (op, e) ->
+        block depth [
+            line depth ("Unary(" ^ string_of_unary_op op);
+            string_of_expr (depth + 1) e;
+            line depth ")"
+        ]
 
-    | Binary (expr1, bin_op, expr2) -> "Binary(\n"
-        ^ string_of_expr (depth + 1) expr1 ^ "\n"
-        ^ ind ^ string_of_binary_op bin_op ^ "\n"
-        ^ string_of_expr (depth + 1) expr2 ^ "\n"
-        ^ indent depth ^ ")"
+    | Binary (lhs, op, rhs) ->
+        block depth [
+            line depth ("Binary(" ^ string_of_binary_op op);
+            string_of_expr (depth + 1) lhs;
+            string_of_expr (depth + 1) rhs;
+            line depth ")"
+        ]
 
-    | Unary (un_op, expr) -> "Unary(\n"
-        ^ string_of_unary_op un_op
-        ^ string_of_expr (depth + 1) expr ^ "\n"
-        ^ indent depth ^ ")"
+    | Logical (lhs, op, rhs) ->
+        block depth [
+            line depth ("Logical(" ^ string_of_logical_op op);
+            string_of_expr (depth + 1) lhs;
+            string_of_expr (depth + 1) rhs;
+            line depth ")"
+        ]
 
-    | Logical (expr1, op, expr2) -> "Logical(\n"
-        ^ string_of_expr (depth + 1) expr1 ^ "\n"
-        ^ ind ^ string_of_logical_op op ^ "\n"
-        ^ string_of_expr (depth + 1) expr2 ^ "\n"
-        ^ indent depth ^ ")"
+    | Assign (s, e) ->
+        block depth [
+            line depth ("Assign(" ^ s);
+            string_of_expr (depth + 1) e;
+            line depth ")"
+        ]
 
-    | Assign (s, e) -> "Assign(\n"
-        ^ ind ^ s ^ "\n"
-        ^ string_of_expr (depth + 1) e ^ "\n"
-        ^ indent depth ^ ")"
+    | FunExpr (params, return_type, body) ->
+        block depth (
+            [
+                line depth "FunExpr(";
+                string_of_param_list (depth + 1) params;
+            ]
+            @
+            (match return_type with
+            | Some rt ->
+                [line (depth + 1) ("ReturnType(" ^ string_of_data_type rt ^ ")")]
+            | None -> [])
+            @
+            [
+                string_of_block (depth + 1) body;
+                line depth ")";
+            ]
+        )
+    | Group e ->
+        block depth [
+            line depth "Group(";
+            string_of_expr (depth + 1) e;
+            line depth ")"
+        ]
 
-    | FunExpr (params, return_type, b) -> "FunExpr(\n"
-        ^ string_of_param_list (depth + 1) params
-        ^ (match return_type with
-            | Some rt -> ind ^ string_of_data_type rt ^ "\n"
-            | None -> "")
-        ^ string_of_block (depth + 1) b ^ "\n"
-        ^ indent depth ^ ")"
-
-    | Group x -> "Group(\n"
-        ^ string_of_expr (depth + 1) x ^ "\n"
-        ^ ind ^ ")"
-
-
-and string_of_block depth block =
-    let ind = indent depth in
-    ind ^ "[\n"
-    ^ String.concat ",\n" (List.map (string_of_statement (depth + 1)) block) ^ "\n"
-    ^ ind ^ "]"
+and string_of_block depth stmts =
+    block depth (
+        line depth "Block[" ::
+        (List.map (string_of_statement (depth + 1)) stmts)
+        @
+        [line depth "]"]
+    )
 
 and string_of_statement depth stmt =
-    let ind = indent depth in
-
-    ind ^
     match stmt.kind with
-        | IfStmt (e, b, bo) -> "If(\n"
-            ^ string_of_expr (depth + 1) e ^ ",\n"
-            ^ indent (depth + 1) ^ "Then("
-            ^ string_of_block (depth + 1) b
-            ^ ")"
-            ^ begin match bo with
-                | Some x -> ",\n" ^ indent (depth + 1) ^ "Else("
-                    ^ string_of_block (depth + 1) x
-                    ^ ")\n"
-                | None -> "\n"
-                end
-            ^ ind ^ ")"
+    | ExprStmt e ->
+        block depth [
+            line depth "ExprStmt(";
+            string_of_expr (depth + 1) e;
+            line depth ")";
+        ]
 
-        | WhileStmt (e, b) -> "While(\n"
-            ^ string_of_expr (depth + 1) e ^ "\n"
-            ^ string_of_block (depth + 1) b ^ "\n"
-            ^ ind ^ ")"
+    | PrintStmt e ->
+        block depth [
+            line depth "PrintStmt(";
+            string_of_expr (depth + 1) e;
+            line depth ")";
+        ]
 
-        | ReturnStmt eo -> "Return(\n"
-            ^ begin match eo with
-                | Some e -> string_of_expr (depth + 1) e ^ "\n"
-                | None -> ""
-            end
-            ^ ind ^ ")"
+    | ReturnStmt eo ->
+        block depth (
+            line depth "Return(" ::
+            (match eo with
+            | Some e -> [string_of_expr (depth + 1) e]
+            | None -> [])
+            @
+            [line depth ")"]
+        )
 
-        | VarDeclStmt (dt, s, eo) -> "VarDecl(\n"
-            ^ indent (depth + 1) ^ string_of_data_type dt ^ " " ^ s ^ "\n"
-            ^ begin match eo with
-                | Some e -> string_of_expr (depth + 1) e ^ "\n"
-                | None -> ""
-                end
-            ^ ind ^ ")"
+    | WhileStmt (cond, body) ->
+        block depth [
+            line depth "While(";
+            string_of_expr (depth + 1) cond;
+            string_of_block (depth + 1) body;
+            line depth ")";
+        ]
 
-        | FunDeclStmt (name, params, return_type, block) -> "FunDeclStmt(\n"
-            ^ indent (depth + 1) ^ name ^ ",\n"
-            ^ string_of_param_list (depth + 1) params
-            ^ (match return_type with
-                | Some rt -> indent (depth + 1) ^ string_of_data_type rt ^ ",\n"
-                | None -> "")
-            ^ string_of_block (depth + 1) block ^ "\n"
-            ^ ind ^ ")"
+    | IfStmt (cond, then_block, else_block) ->
+        block depth (
+            [
+                line depth "If(";
+                string_of_expr (depth + 1) cond;
+                line (depth + 1) "Then";
+                string_of_block (depth + 2) then_block;
+            ]
+            @
+            (match else_block with
+            | Some b ->
+                [
+                    line (depth + 1) "Else";
+                    string_of_block (depth + 2) b;
+                ]
+            | None -> [])
+            @
+            [line depth ")"]
+        )
 
+    | VarDeclStmt (dt, name, init) ->
+        block depth (
+            [
+                line depth ("VarDecl(" ^ string_of_data_type dt ^ " " ^ name);
+            ]
+            @
+            (match init with
+            | Some e -> [string_of_expr (depth + 1) e]
+            | None -> [])
+            @
+            [line depth ")"]
+        )
 
-        | ExprStmt e -> "ExprStmt(\n"
-            ^ string_of_expr (depth + 1) e ^ "\n"
-            ^ ind ^ ")"
+    | FunDeclStmt (name, params, return_type, body) ->
+        block depth (
+            [
+                line depth ("FunDecl(" ^ name);
+                string_of_param_list (depth + 1) params;
+            ]
+            @
+            (match return_type with
+            | Some rt ->
+                [line (depth + 1) ("ReturnType(" ^ string_of_data_type rt ^ ")")]
+            | None -> [])
+            @
+            [
+                string_of_block (depth + 1) body;
+                line depth ")";
+            ]
+        )
 
-        | BlockStmt b -> "BlockStmt(\n"
-            ^ string_of_block (depth + 1) b ^ "\n"
-            ^ ind ^ ")"
-
-        | PrintStmt e -> "PrintStmt(\n"
-            ^ string_of_expr (depth + 1) e ^ "\n"
-            ^ ind ^ ")"
-
+    | BlockStmt b ->
+        string_of_block depth b
