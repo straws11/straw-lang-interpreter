@@ -204,7 +204,6 @@ and parse_function_decl parser =
     primary = INTEGER | FLOAT | STRING | BOOLEAN | IDENTIFIER | function_expr | "(" expr ")"
 *)
 and parse_primary parser =
-    print_endline ("got a primary" ^ string_of_token parser.tokens.(parser.pos).kind );
     match peek parser with
         | Some Fn -> parse_function_expr parser
         | Some tok ->
@@ -232,9 +231,7 @@ and parse_primary parser =
 *)
 and parse_expr_list parser =
     let rec loop acc =
-        print_endline ("uno" ^ string_of_token parser.tokens.(parser.pos).kind);
         if (consume parser Comma) then(
-            print_endline ("dos" ^ string_of_token parser.tokens.(parser.pos).kind);
             match peek parser with
                 | Some x when starts_expr parser -> loop (parse_expr parser :: acc)
                 | _ -> raise (Parse_error ("Expected expression", get_token_pos parser))
@@ -343,7 +340,7 @@ and parse_comparison_tail parser left =
 *)
 and parse_logic_and parser =
     let comp = parse_comparison parser in
-    parse_logical_and_tail parser comp
+    parse_logic_and_tail parser comp
 
 and parse_logic_and_tail parser left =
     match peek parser with
@@ -366,7 +363,7 @@ and parse_logic_or_tail parser left =
         | Some Or ->
                 let position = get_token_pos parser in
                 ignore (advance parser);
-                let right = parse_logic_and in
+                let right = parse_logic_and parser in
                 parse_logic_or_tail parser { kind = Logical (left, OrOp, right); pos = position }
         | _ -> left
 
@@ -396,7 +393,6 @@ and parse_expr parser = parse_assignment parser
     block = "{" ( statement )* "}"
 *)
 and parse_block parser =
-    print_endline ("parsing the stmt block");
     let rec loop acc = match peek parser with
             | Some RBrace -> acc
             | Some x -> let stmt = parse_statement parser in

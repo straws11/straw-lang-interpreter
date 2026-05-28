@@ -48,8 +48,8 @@ exception Type_custom_error of string * Lexing_types.position
         | Type_invalid_un_operator_error (dt, op, pos) ->
                 Some (Printf.sprintf "TypeError: operator '%s' not applicable for type %s at %d:%d" op dt pos.line pos.column)
 
-        | Type_invalid_operator_error (dt, op, op2, pos) ->
-                Some (Printf.sprintf "TypeError: operator '%s' not applicable for types %s and %s at %d:%d" op dt op2 pos.line pos.column)
+        | Type_invalid_operator_error (op, dt, dt2, pos) ->
+                Some (Printf.sprintf "TypeError: operator '%s' not applicable for types %s and %s at %d:%d" op dt dt2 pos.line pos.column)
 
         | Type_undeclared_error (name, pos) ->
                 Some (Printf.sprintf "TypeError: variable %s not declared at %d:%d" name pos.line pos.column)
@@ -92,7 +92,7 @@ and type_check_binary st (binary: Ast.expr) =
         let t1 = type_check_expr st exp1 in
         let t2 = type_check_expr st exp2 in
         if not (types_match t1 t2) then
-            raise (Type_invalid_operator_error (str_of_dt t1, Ast.string_of_binary_op op, str_of_dt t2, binary.pos))
+            raise (Type_invalid_operator_error (Ast.string_of_binary_op op, str_of_dt t1, str_of_dt t2, binary.pos))
         else
             begin match t1 with
                 | TUnit -> raise (Type_custom_error ("Cannot add unit types", binary.pos))
@@ -110,15 +110,15 @@ and type_check_binary st (binary: Ast.expr) =
                 | TBoolean ->
                     begin match op with
                         | Ast.EqualOp | Ast.NotEqual -> Ast.TBoolean
-                        | _ -> raise (Type_invalid_operator_error (str_of_dt t1 , Ast.string_of_binary_op op, str_of_dt t2, binary.pos))
+                        | _ -> raise (Type_invalid_operator_error (Ast.string_of_binary_op op, str_of_dt t1, str_of_dt t2, binary.pos))
                     end
 
-                | TFunction -> raise (Type_invalid_operator_error (str_of_dt t1, Ast.string_of_binary_op op, str_of_dt t2, binary.pos))
+                | TFunction -> raise (Type_invalid_operator_error (Ast.string_of_binary_op op, str_of_dt t1, str_of_dt t2, binary.pos))
 
                 | TString ->
                     begin match op with
                         | Add -> Ast.TString
-                        | Div | Sub | Mul -> raise (Type_invalid_operator_error (str_of_dt t1, Ast.string_of_binary_op op, str_of_dt t2, binary.pos))
+                        | Div | Sub | Mul -> raise (Type_invalid_operator_error (Ast.string_of_binary_op op, str_of_dt t1, str_of_dt t2, binary.pos))
                         | _ -> Ast.TBoolean
                     end
                 end
@@ -127,7 +127,7 @@ and type_check_binary st (binary: Ast.expr) =
 and type_check_unary st (unary: Ast.expr) =
     match unary.kind with
     | Ast.Unary (op, exp) ->
-        let exp_type = type_check_expr st unary in
+        let exp_type = type_check_expr st exp in
         begin match op with
         | Ast.Not ->
             if not (exp_type = TBoolean) then
@@ -141,6 +141,20 @@ and type_check_unary st (unary: Ast.expr) =
                 | _ -> raise (Type_invalid_un_operator_error (str_of_dt exp_type, Ast.string_of_unary_op op, unary.pos))
             end
         end
+    | _ -> failwith "Impossible"
+
+and type_check_logical st (logical: Ast.expr) =
+    match logical.kind with
+    | Ast.Logical (exp1, op, exp2) ->
+        let t1 = type_check_expr st exp1 in
+        let t2 = type_check_expr st exp2 in
+        begin match t1, t2 with
+            | Ast.TBoolean, Ast.TBoolean -> Ast.TBoolean
+            (* | Ast.TBoolean, _ -> raise (Type_mismatch_error (str_of_dt t2, "logical", exp2.pos)) *)
+            (* | _, Ast.TBoolean -> raise (Type_mismatch_error (str_of_dt t1, "logical", exp1.pos)) *)
+            | _, _ -> raise (Type_invalid_operator_error (Ast.string_of_logical_op op, str_of_dt t1, str_of_dt t2, logical.pos))
+        end
+
     | _ -> failwith "Impossible"
 
 and type_check_call st (exp: Ast.expr) =
@@ -203,8 +217,8 @@ and type_check_expr st (exp: Ast.expr) = match exp.kind with
     (* TODO: nesting of this and typecheck params *)
     | Call (_, _) -> type_check_call st exp
     | Binary (_, _, _) -> type_check_binary st exp
-
     | Unary (_, _) -> type_check_unary st exp
+    | Logical (_, _, _) -> type_check_logical st exp
     | Assign (var, exp) ->
             let var_type = match get_var_type st var with
                 | Some x -> x

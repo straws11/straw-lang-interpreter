@@ -2,7 +2,7 @@ fn factorial(int n) -> int {
     if n == 1 or n == 0 {
         return 1
     }
-    return factorial(n-1)
+    return n * factorial(n-1)
 }
 
-print(factorial(10))
+print(factorial(5))

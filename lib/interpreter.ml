@@ -157,7 +157,7 @@ and interpret_expr env (expr: Ast.expr)  = match expr.kind with
     | Logical (expr1, logical_op, expr2) ->
         let val1 = interpret_expr env expr1 in
         let val2 = interpret_expr env expr2 in
-        intepret_logical val1 logical_op val2
+        interpret_logical val1 logical_op val2
 
 
     | Assign (var_name, expr) ->
@@ -273,6 +273,18 @@ and interpret_unary op v = match op with
         | VInteger x -> VInteger (-x)
         | VFloat x -> VFloat (-.x)
         | _ -> raise (Type_error "Can only negate numbers")
+        end
+
+and interpret_logical v1 op v2 = match op with
+    | AndOp -> begin match v1 with
+        (* result of and will be result of 2nd one, given first is true *)
+        | VBoolean true -> v2
+        | VBoolean false -> VBoolean (false) (* short circuit, don't eval 2nd one *)
+        | _ -> failwith "Impossible"
+        end
+    | OrOp -> begin match v1, v2 with
+        | VBoolean x, VBoolean y -> VBoolean (x || y)
+        | _ -> failwith "Impossible"
         end
 
 and interpret_statement env (stmt: Ast.statement) = match stmt.kind with
