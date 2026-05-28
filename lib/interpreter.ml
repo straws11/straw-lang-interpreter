@@ -8,6 +8,7 @@ let v_type_to_t_type v_var = match v_var with
     | VBoolean _ -> TBoolean
     | VFunction _ -> TFunction
     | VString _ -> TString
+    | VUnit -> failwith "Impossible"
 
 let value_has_right_type v t = match v, t with
     | VNumber _, TNumber -> true
@@ -29,7 +30,6 @@ let types_match t1 t2 = match t1, t2 with
    *)
 let lookup env var =
     let rec loop scope =
-        print_env scope;
         let item = Hashtbl.find_opt scope.tbl var in
         match item with
             | Some Some x -> Some (Some x) (* found & has value *)
@@ -65,18 +65,37 @@ exception Type_error of string
         | Type_error (s) -> Some (Printf.sprintf "TypeError: %s" s)
         | _ -> None
     )
+
+exception Return_exception of value option (* used for returning *)
 (* core *)
 
 let rec apply_function env (func: function_value) (args: value list) =
-    let param_types = List.map (fun element -> fst element) func.params in
+    (*let param_types = List.map (fun element -> fst element) func.params in
     List.iter2 (fun actual_val expected_type -> (
         if not (value_has_right_type actual_val expected_type) then
             raise (Type_error "Argument type doesn't match parameter type")
-    )) args param_types;
+    )) args param_types;*)
 
-    interpret_block env func.body;
-    (* TODO: implement some resolution to the return value?? *)
-    VNumber 3.4
+    let rec insert_params env params rem = match params, rem with
+        | ph :: pt, h :: t -> insert env (snd ph) h; insert_params env pt t
+        | [], [] -> ()
+        | _ -> failwith "Impossible"
+    in
+
+    let rec loop env stmts = match stmts with
+        | h :: t -> interpret_statement env h; loop env t
+        | [] -> ()
+    in
+    let func_scope: environment = { outer = Some env; tbl = Hashtbl.create 11 } in
+    insert_params func_scope func.params args;
+    print_env func_scope;
+    try
+        loop func_scope func.body;
+        VUnit
+    with
+        | Return_exception v -> match v with
+            | Some x -> x
+            | None -> VUnit
 
 and interpret_while env expr body =
     let rec run_loop () =
@@ -147,7 +166,8 @@ and interpret_expr env (expr: Ast.expr)  = match expr.kind with
     | FunExpr (parameter_list, data_type, body) ->
         let fun_val: function_value = {
             body = body;
-            params = parameter_list
+            params = parameter_list;
+            return_type = data_type
         } in
         VFunction fun_val
 
@@ -235,9 +255,9 @@ and interpret_statement env (stmt: Ast.statement) = match stmt.kind with
 
     | ReturnStmt (expr_option) ->
         begin match expr_option with
-            | Some x -> let _ = interpret_expr env x in
-                ()
-            | None -> ()
+            | Some x -> let ex = interpret_expr env x in
+                raise (Return_exception (Some ex))
+            | None -> raise (Return_exception None)
         end
 
 
@@ -257,6 +277,7 @@ and interpret_statement env (stmt: Ast.statement) = match stmt.kind with
         let fun_val: function_value = {
             body = body;
             params = parameter_list;
+            return_type = data_type
         } in
         insert env name (VFunction fun_val);
 
@@ -274,6 +295,7 @@ and interpret_statement env (stmt: Ast.statement) = match stmt.kind with
             | VNumber num -> print_endline (string_of_float num)
             | VString s -> print_endline s
             | VFunction _ -> raise (Type_error "Unimplemented")
+            | VUnit -> raise (Type_error "Cannot print unit type")
         end
 
 
@@ -288,19 +310,41 @@ and interpret_block env (ast: block): unit =
             tbl = Hashtbl.create 11;
     }
     in
+    print_endline "enter block";
     loop new_scope ast;
-    print_env env
+    print_endline "After block interpretation";
+    print_env new_scope
 
+and collect_statement env (stmt: Ast.statement) = match stmt.kind with
+    | Ast.VarDeclStmt (_, name, Some { kind = FunExpr (params, return_op, body); _ }) ->
+        let func_val = { params = params; body = body; return_type = return_op } in
+        insert env name (VFunction func_val)
 
-and interpret ast =
-    let rec loop scope rem = match rem with
-        | h :: t -> interpret_statement scope h; loop scope t
+    | Ast.VarDeclStmt (dt, name, _expr_op) ->
+        insert_empty env name (* insert that the var exists but ignore its type, we will deal later*)
+
+    | Ast.FunDeclStmt (name, params, return_op, body) ->
+            let func_val = { params = params; body = body; return_type = return_op } in
+            insert env name (VFunction func_val)
+
+    | _ -> ()
+
+and collect_declarations ast =
+    let rec loop st rem_stmts = match rem_stmts with
+        | h :: t -> collect_statement st h; loop st t
         | [] -> ()
     in
-    let init_scope = {
-            outer = None;
-            tbl = Hashtbl.create 11;
-    }
+    let global_scope: environment = { outer = None; tbl = Hashtbl.create 11 } in
+    loop global_scope ast;
+    print_endline "After collection:";
+    print_env global_scope;
+    global_scope
+
+and interpret ast =
+    let rec loop env rem = match rem with
+        | h :: t -> interpret_statement env h; loop env t
+        | [] -> ()
     in
-    loop init_scope ast
+    let scope = collect_declarations ast in
+    loop scope ast
 

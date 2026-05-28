@@ -2,13 +2,12 @@ num theNum = 5
 str words = "stringy"
 bool flag = false
 
-if true {
-    print("inside")
+while theNum < 9999 {
+    theNum = double(theNum)
     print(theNum)
-    str hi = "hello world"
 }
 
-print("outside")
+print("final value:")
 print(theNum)
 
 //for (num i = 0; i < 5; i = i + 1) {
@@ -17,6 +16,6 @@ print(theNum)
 //}
 func clos = fn (num aa, str b) {}
 
-fn dothing(num useless) -> num {
-    return useless + "hi"
+fn double(num val) -> num {
+    return val * 2
 }
