@@ -1,18 +1,30 @@
 open Semantic_types
 
 (* helpers *)
-let types_match t1 t2 = match t1, t2 with
+let types_match_exact t1 t2 = match t1, t2 with
     | Ast.TBoolean, Ast.TBoolean -> true
-    | Ast.TNumber, Ast.TNumber -> true
+    | Ast.TInteger, Ast.TInteger -> true
+    | Ast.TFloat, Ast.TFloat -> true
     | Ast.TString, Ast.TString -> true
     | Ast.TFunction, Ast.TFunction -> true
     | _ -> false
+
+(* added compat checks for say floats and ints*)
+let types_match t1 t2 =
+    if types_match_exact t1 t2 then
+        true
+    else
+        match t1, t2 with
+        | Ast.TFloat, Ast.TInteger -> true
+        | Ast.TInteger, Ast.TFloat -> true
+        | _ -> false
 
 let str_of_dt dt =
     match dt with
         | Ast.TBoolean -> "bool"
         | Ast.TString -> "str"
-        | Ast.TNumber -> "num"
+        | Ast.TInteger -> "int"
+        | Ast.TFloat -> "float"
         | Ast.TFunction -> "fn"
 
 let create_new_scope outer_scope = { outer = outer_scope; tbl = Hashtbl.create 11 }
@@ -56,7 +68,7 @@ let rec type_check_return st cur_return_type (ret: Ast.statement) =
         in
         begin match cur_return_type, exp_type with
             | Some return_type, Some ex ->
-                if not (types_match return_type ex) then
+                if not (types_match_exact return_type ex) then
                     raise (Type_mismatch_error (str_of_dt ex, str_of_dt return_type, ret.pos))
                 else
                     ()
@@ -82,9 +94,15 @@ and type_check_binary st (binary: Ast.expr) =
             raise (Type_invalid_operator_error (str_of_dt t1, Ast.string_of_binary_op op, str_of_dt t2, binary.pos))
         else
             begin match t1 with
-                | TNumber ->
+                | TFloat ->
                     begin match op with
-                        | Add | Sub | Mul | Div -> Ast.TNumber
+                        | Add | Sub | Mul | Div -> Ast.TFloat
+                        | _ -> Ast.TBoolean
+                    end
+                | TInteger ->
+                        begin match op with
+                        | Add | Sub | Mul -> Ast.TInteger
+                        | Div -> Ast.TFloat
                         | _ -> Ast.TBoolean
                     end
                 | TBoolean ->
@@ -116,17 +134,52 @@ and type_check_unary st (unary: Ast.expr) =
                 Ast.TBoolean
 
         | Ast.Negate ->
-            if not (exp_type = TNumber) then
-                raise (Type_invalid_un_operator_error (str_of_dt exp_type, Ast.string_of_unary_op op, unary.pos))
+            begin match exp_type with
+                | TInteger | TFloat as x -> x
+                | _ -> raise (Type_invalid_un_operator_error (str_of_dt exp_type, Ast.string_of_unary_op op, unary.pos))
+            end
+        end
+    | _ -> failwith "Impossible"
+
+and type_check_call st (exp: Ast.expr) =
+    let rec loop st exprs data_types = match exprs, data_types with
+        | h :: t, dh :: dt ->
+            let e = type_check_expr st h in
+            if types_match_exact e dh then
+                loop st t dt
             else
-                Ast.TNumber
+                raise (Type_mismatch_error (str_of_dt e, str_of_dt dh, exp.pos))
+
+        | [], _h :: _t -> raise (Type_custom_error ("Too few arguments to function call", exp.pos))
+        | _h :: _t, [] -> raise (Type_custom_error ("Too many arguments to function call", exp.pos))
+        | [], [] -> ()
+    in
+
+    match exp.kind with
+    | Call (expr, param_exprs) ->
+            begin match expr with
+            (* TODO: FunExpr should also be able to match `fn (str smth){}("hi")` *)
+            | { kind = Variable x; _ } ->
+                begin match lookup_st st x with
+                    | Some FunctionSymbol (param_dts, ret_dt_op) ->
+                            loop st param_exprs param_dts; 
+                            begin match ret_dt_op with
+                                | Some x -> x
+                                | None -> failwith "Impossible"
+                            end
+                    | Some VariableSymbol dt -> raise (Type_custom_error ("Variable of type " ^ str_of_dt dt ^ " not callable", exp.pos))
+                    | _ -> raise (Type_custom_error ("Undefined variable not callable", exp.pos))
                 end
+            | x -> raise (Type_mismatch_error ("expression", "function", exp.pos))
+            end
+
     | _ -> failwith "Impossible"
 
 
 
 and type_check_expr st (exp: Ast.expr) = match exp.kind with
-    | NumLit x -> Ast.TNumber
+    | IntLit x -> Ast.TInteger
+    | FloatLit x -> Ast.TFloat
     | BoolLit x -> Ast.TBoolean
     | StrLit x -> Ast.TString
 
@@ -136,8 +189,8 @@ and type_check_expr st (exp: Ast.expr) = match exp.kind with
             | None -> raise (Type_undeclared_error (x, exp.pos))
         end
 
-    | Call (exp, params) -> type_check_expr st exp (* TODO: nesting of this and typecheck params *)
-
+    (* TODO: nesting of this and typecheck params *)
+    | Call (_, _) -> type_check_call st exp
     | Binary (_, _, _) -> type_check_binary st exp
 
     | Unary (_, _) -> type_check_unary st exp
@@ -147,7 +200,7 @@ and type_check_expr st (exp: Ast.expr) = match exp.kind with
                 | None -> raise (Type_undeclared_error (var, exp.pos))
             in
             let exp_type = type_check_expr st exp in
-            if types_match var_type exp_type then
+            if types_match_exact var_type exp_type then
                 var_type
             else
                 raise (Type_mismatch_error (str_of_dt exp_type, str_of_dt var_type, exp.pos))
@@ -184,10 +237,10 @@ and type_check_statement st (cur_ret_type: Ast.data_type option) (stmt: Ast.stat
         insert_st st name (VariableSymbol dt);
         begin match exp_op with
             | Some exp -> let exp_type = type_check_expr st exp in
-                if types_match dt exp_type then
+                if types_match_exact dt exp_type then
                     ()
                 else
-                    raise (Type_mismatch_error (str_of_dt dt, str_of_dt exp_type, exp.pos))
+                    raise (Type_mismatch_error (str_of_dt exp_type, str_of_dt dt, exp.pos))
             | None -> ()
         end;
 
@@ -224,7 +277,7 @@ and type_check_block st ret_type body =
     let inner_scope: scope = create_new_scope (Some st) in
     type_check_statement_list inner_scope ret_type body
 
-and type_check st ast = type_check_block st (Some TNumber) ast
+and type_check st ast = type_check_block st (Some TInteger) ast
 
 and collect_statement sym_tbl (stmt: Ast.statement) = match stmt.kind with
     | Ast.VarDeclStmt (_, name, Some { kind = FunExpr (params, return_op, _body); _ }) ->

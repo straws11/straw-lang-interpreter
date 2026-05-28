@@ -6,7 +6,7 @@ open Ast
     function_params = [ data_type IDENTIFIER ( "," data_type IDENTIFIER )* ]
     function_expr = "fn" "(" function_params ")" [ "->" data_type ] block
     function_decl = "fn" IDENTIFIER "(" function_params ")" [ "->" data_type ] block
-    primary = NUMBER | STRING | BOOLEAN | IDENTIFIER | function_expr | "(" expr ")"
+    primary = INTEGER | FLOAT | STRING | BOOLEAN | IDENTIFIER | function_expr | "(" expr ")"
     expr_list = expr ( "," expr )*
     call = primary ( "(" expr_list ")" )*
     unary = ( "!" | "-" ) unary | call
@@ -23,7 +23,7 @@ open Ast
     for = "for" "(" for_initializer ";" for_condition ";" for_increment ")" block
     while = "while" expr block
     return = "return" [ expr ]
-    data_type = ( num | bool | str | func )
+    data_type = ( int | float | bool | str | func )
     declaration = data_type IDENTIFIER [ "=" expr ]
     print = "print" "(" expr ")"
     statement = ( if | for | while | return | declaration | function_decl | expr_stmt | print )
@@ -103,7 +103,8 @@ let expect parser expected msg =
         match actual, expected with
             | Identifier _, Identifier _ -> true
             | String _, String _ -> true
-            | Number _, Number _ -> true
+            | Integer _, Integer _ -> true
+            | FloatPoint _, FloatPoint _ -> true
             | Boolean _, Boolean _ -> true
             | _ -> actual = expected
         end
@@ -122,11 +123,11 @@ let expect_id parser = match advance parser with
 
 (* TODO: should this be called starts_call?? *)
 let starts_primary tok = match tok with
-    | Identifier _ | String _ | Boolean _ | Number _ | Fn | LParen -> true
+    | Identifier _ | String _ | Boolean _ | Integer _ | FloatPoint _ | Fn | LParen -> true
     | _ -> false
 
 let starts_declaration tok = match tok with
-    | Num | Str | Bool | Func -> true
+    | Int | Float | Str | Bool | Func -> true
     | _ -> false
 
 let starts_assignment parser = match peek parser with
@@ -159,7 +160,8 @@ let rec parse_function_params parser =
                 let dt = parse_data_type parser in
                 let id = expect_id parser in
                 loop [(dt, id)]
-        | _ -> []
+        | Some x when x = RParen -> []
+        | _ -> raise (Parse_error ("Expected type for formal argument", get_token_pos parser))
 
 (*
     function_expr = "fn" "(" function_params ")" [ "->" data_type ] block
@@ -197,7 +199,7 @@ and parse_function_decl parser =
     { kind = FunDeclStmt (id, params, dt, block); pos = position }
 
 (*
-    primary = NUMBER | STRING | BOOLEAN | IDENTIFIER | function_expr | "(" expr ")"
+    primary = INTEGER | FLOAT | STRING | BOOLEAN | IDENTIFIER | function_expr | "(" expr ")"
 *)
 and parse_primary parser =
     print_endline ("got a primary" ^ string_of_token parser.tokens.(parser.pos).kind );
@@ -208,7 +210,8 @@ and parse_primary parser =
             ignore (advance parser);
             { kind = begin match tok with
             | String x -> StrLit x
-            | Number x -> NumLit x
+            | Integer x -> IntLit x
+            | FloatPoint x -> FloatLit x
             | Boolean x -> BoolLit x
             | Identifier x -> Variable x
             | LParen ->
@@ -487,11 +490,12 @@ and parse_return parser =
 
         | _ -> { kind = ReturnStmt None; pos = unit_return_pos }
 (*
-    data_type = ( num | bool | str | func )
+    data_type = ( int | float | bool | str | func )
 *)
 and parse_data_type parser =
     match advance parser with
-        | Some Num -> TNumber
+        | Some Int -> TInteger
+        | Some Float -> TFloat
         | Some Bool -> TBoolean
         | Some Str -> TString
         | Some Func -> TFunction

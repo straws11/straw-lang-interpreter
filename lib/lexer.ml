@@ -71,8 +71,11 @@ let number cur_char lexer =
             end
         | _ -> acc
     in
+
     let accumulated = loop [cur_char] in
-    Lexing_types.Number (accumulated |> string_of_rev_char_list |> float_of_string)
+    match List.find_opt (fun x -> x = '.') accumulated with
+        | Some _ -> Lexing_types.FloatPoint (accumulated |> string_of_rev_char_list |> float_of_string)
+        | None -> Lexing_types.Integer (accumulated |> string_of_rev_char_list |> int_of_string)
 
 let str lexer =
     let rec loop acc = match advance_opt lexer with

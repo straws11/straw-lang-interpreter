@@ -31,7 +31,8 @@ type token_kind =
     (* literals *)
     | Identifier of string
     | String of string
-    | Number of float
+    | FloatPoint of float
+    | Integer of int
     | Boolean of bool
 
     (* keywords *)
@@ -42,7 +43,8 @@ type token_kind =
     | Else
     | Or
     | Return
-    | Num
+    | Int
+    | Float
     | Str
     | Bool
     | Func
@@ -81,7 +83,8 @@ let string_of_token token_type = match token_type with
     | Arrow -> "Arrow"
     | Identifier x -> "Identifier(" ^ x ^ ")"
     | String x -> "String(" ^ x ^ ")"
-    | Number x -> "Number(" ^ string_of_float x ^ ")"
+    | Integer x -> "Integer(" ^ string_of_int x ^ ")"
+    | FloatPoint x -> "FloatPoint(" ^ string_of_float x ^ ")"
     | Boolean x -> "Boolean(" ^ string_of_bool x ^ ")"
     | And -> "And"
     | Fn -> "Fn"
@@ -90,7 +93,8 @@ let string_of_token token_type = match token_type with
     | Else -> "Else"
     | Or -> "Or"
     | Return -> "Return"
-    | Num -> "Num"
+    | Int -> "Int"
+    | Float -> "Float"
     | Str -> "Str"
     | Bool -> "Bool"
     | Func -> "Func"
@@ -110,7 +114,8 @@ let reserved_words = StringMap.of_seq @@ List.to_seq [
     ("else", Else);
     ("or", Or);
     ("return", Return);
-    ("num", Num);
+    ("int", Int);
+    ("float", Float);
     ("str", Str);
     ("bool", Bool);
     ("func", Func);

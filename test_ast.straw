@@ -1,8 +1,8 @@
-num theNum = 5
+float theNum = 5.0
 str words = "stringy"
 bool flag = false
 
-while theNum < 9999 {
+while theNum < 9999.0 {
     theNum = double(theNum)
     print(theNum)
 }
@@ -10,12 +10,12 @@ while theNum < 9999 {
 print("final value:")
 print(theNum)
 
-//for (num i = 0; i < 5; i = i + 1) {
+//for (int i = 0; i < 5; i = i + 1) {
 //    print("hello")
-//    print(i)
+//    print(i * 3.1)
 //}
-func clos = fn (num aa, str b) {}
+func clos = fn (int aa, str b) {}
 
-fn double(num val) -> num {
+fn double(float val) -> float {
     return val * 2
 }

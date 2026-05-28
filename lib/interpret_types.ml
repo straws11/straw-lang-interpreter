@@ -5,7 +5,8 @@ type function_value = {
 }
 
 type value =
-        | VNumber of float
+        | VInteger of int
+        | VFloat of float
         | VBoolean of bool
         | VString of string
         | VFunction of function_value
@@ -28,7 +29,8 @@ let rec string_of_param_list params =
 let string_of_function f = "function:" ^ string_of_param_list f.params
 
 let rec string_of_value v = match v with
-        | VNumber f -> string_of_float f
+        | VInteger f -> string_of_int f
+        | VFloat f -> string_of_float f
         | VBoolean b -> string_of_bool b
         | VString s -> s
         | VFunction f -> string_of_function f

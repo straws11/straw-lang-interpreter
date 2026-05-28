@@ -1,5 +1,6 @@
 type data_type =
-    | TNumber
+    | TInteger
+    | TFloat
     | TBoolean
     | TString
     | TFunction
@@ -21,7 +22,8 @@ type unary_op =
     | Negate
 
 type expr_kind =
-    | NumLit of float
+    | FloatLit of float
+    | IntLit of int
     | BoolLit of bool
     | StrLit of string
 
@@ -67,7 +69,8 @@ and block = statement list
 let indent n = String.make (n * 2) ' '
 
 let string_of_data_type dt = match dt with
-    | TNumber -> "TNumber"
+    | TInteger -> "TInteger"
+    | TFloat -> "TFloat"
     | TBoolean -> "TBoolean"
     | TString -> "TString"
     | TFunction -> "TFunction"
@@ -101,7 +104,8 @@ let rec string_of_expr depth expr =
     let ind = indent (depth + 1) in
 
     indent depth ^ match expr.kind with
-    | NumLit x -> "NumLit(" ^ string_of_float x ^ ")"
+    | IntLit x -> "IntLit(" ^ string_of_int x ^ ")"
+    | FloatLit x -> "FloatLit(" ^ string_of_float x ^ ")"
     | BoolLit x -> "BoolLit(" ^ string_of_bool x ^ ")"
     | StrLit x -> "StrLit(" ^ x ^ ")"
     | Variable x -> "Variable(" ^ x ^ ")"

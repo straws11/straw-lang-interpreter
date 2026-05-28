@@ -4,14 +4,16 @@ open Interpret_types
 (* help *)
 
 let v_type_to_t_type v_var = match v_var with
-    | VNumber _ -> TNumber
+    | VInteger _ -> TInteger
+    | VFloat _ -> TFloat
     | VBoolean _ -> TBoolean
     | VFunction _ -> TFunction
     | VString _ -> TString
     | VUnit -> failwith "Impossible"
 
 let value_has_right_type v t = match v, t with
-    | VNumber _, TNumber -> true
+    | VInteger _, TInteger -> true
+    | VFloat _, TFloat -> true
     | VBoolean _, TBoolean -> true
     | VString _, TString -> true
     | VFunction _, TFunction -> true
@@ -19,7 +21,8 @@ let value_has_right_type v t = match v, t with
 
 let types_match t1 t2 = match t1, t2 with
     | VBoolean _, VBoolean _ -> true
-    | VNumber _, VNumber _ -> true
+    | VInteger _, VInteger _ -> true
+    | VFloat _, VFloat _ -> true
     | VString _, VString _ -> true
     | VFunction _, VFunction _ -> true
     | _ -> false
@@ -125,7 +128,8 @@ and interpret_if env expr body else_body =
 
 
 and interpret_expr env (expr: Ast.expr)  = match expr.kind with
-    | NumLit x -> VNumber x
+    | IntLit x -> VInteger x
+    | FloatLit x -> VFloat x
     | BoolLit x -> VBoolean x
     | StrLit x -> VString x
 
@@ -175,63 +179,81 @@ and interpret_expr env (expr: Ast.expr)  = match expr.kind with
 
 and interpret_binary v1 op v2 = match op with
     | Add -> begin match (v1, v2) with
-        | VNumber x, VNumber y -> VNumber (x +. y)
+        | VInteger x, VInteger y -> VInteger (x + y)
+        | VFloat x, VFloat y -> VFloat (x +. y)
+        | VFloat x, VInteger y -> VFloat (x +. Float.of_int y)
+        | VInteger x, VFloat y -> VFloat (Float.of_int x +. y)
         | VString x, VString y -> VString (x ^ y)
         | _ -> raise (Type_error "Invalid operator for types")
         end
 
     | Sub -> begin match (v1, v2) with
-        | VNumber x, VNumber y -> VNumber (x -. y)
+        | VInteger x, VInteger y -> VInteger (x - y)
+        | VFloat x, VFloat y -> VFloat (x -. y)
+        | VFloat x, VInteger y -> VFloat (x -. Float.of_int y)
+        | VInteger x, VFloat y -> VFloat (Float.of_int x -. y)
         | _ -> raise (Type_error "Invalid operator for types")
         end
 
     | Mul -> begin match (v1, v2) with
-        | VNumber x, VNumber y -> VNumber (x *. y)
+        | VInteger x, VInteger y -> VInteger (x * y)
+        | VFloat x, VFloat y -> VFloat (x *. y)
+        | VFloat x, VInteger y -> VFloat (x *. Float.of_int y)
+        | VInteger x, VFloat y -> VFloat (Float.of_int x *. y)
         | _ -> raise (Type_error "Invalid operator for types")
         end
 
     | Div -> begin match (v1, v2) with
-        | VNumber x, VNumber y -> VNumber (x /. y)
+        | VInteger x, VInteger y -> VFloat (Float.of_int x /. (Float.of_int y))
+        | VFloat x, VFloat y -> VFloat (x /. y)
+        | VFloat x, VInteger y -> VFloat (x /. Float.of_int y)
+        | VInteger x, VFloat y -> VFloat (Float.of_int x /. y)
         | _ -> raise (Type_error "Invalid operator for types")
         end
 
     | NotEqual -> begin match (v1, v2) with
-        | VNumber x, VNumber y -> VBoolean (x != y)
+        | VInteger x, VInteger y -> VBoolean (x != y)
+        | VFloat x, VFloat y -> VBoolean (x != y)
         | VBoolean x, VBoolean y -> VBoolean (x != y)
         | VString x, VString y -> VBoolean (not (String.equal x y))
         | _ -> raise (Type_error "Invalid operator for types")
         end
 
     | EqualOp -> begin match (v1, v2) with
-        | VNumber x, VNumber y -> VBoolean (x = y)
+        | VInteger x, VInteger y -> VBoolean (x = y)
+        | VFloat x, VFloat y -> VBoolean (x = y)
         | VBoolean x, VBoolean y -> VBoolean (x = y)
         | VString x, VString y -> VBoolean (String.equal x y)
         | _ -> raise (Type_error "Invalid operator for types")
         end
 
     | LessOp -> begin match (v1, v2) with
-        | VNumber x, VNumber y -> VBoolean (x < y)
+        | VInteger x, VInteger y -> VBoolean (x < y)
+        | VFloat x, VFloat y -> VBoolean (x < y)
         | VBoolean x, VBoolean y -> VBoolean (x < y)
         | VString x, VString y -> VBoolean (x < y)
         | _ -> raise (Type_error "Invalid operator for types")
         end
 
     | LessEqualOp -> begin match (v1, v2) with
-        | VNumber x, VNumber y -> VBoolean (x <= y)
+        | VInteger x, VInteger y -> VBoolean (x <= y)
+        | VFloat x, VFloat y -> VBoolean (x <= y)
         | VBoolean x, VBoolean y -> VBoolean (x <= y)
         | VString x, VString y -> VBoolean (x <= y)
         | _ -> raise (Type_error "Invalid operator for types")
         end
 
     | GreaterOp -> begin match (v1, v2) with
-        | VNumber x, VNumber y -> VBoolean (x > y)
+        | VInteger x, VInteger y -> VBoolean (x > y)
+        | VFloat x, VFloat y -> VBoolean (x > y)
         | VBoolean x, VBoolean y -> VBoolean (x > y)
         | VString x, VString y -> VBoolean (x > y)
         | _ -> raise (Type_error "Invalid operator for types")
         end
 
     | GreaterEqualOp -> begin match (v1, v2) with
-        | VNumber x, VNumber y -> VBoolean (x >= y)
+        | VInteger x, VInteger y -> VBoolean (x >= y)
+        | VFloat x, VFloat y -> VBoolean (x >= y)
         | VBoolean x, VBoolean y -> VBoolean (x >= y)
         | VString x, VString y -> VBoolean (x >= y)
         | _ -> raise (Type_error "Invalid operator for types")
@@ -244,7 +266,8 @@ and interpret_unary op v = match op with
         end
 
     | Negate -> begin match v with
-        | VNumber x -> VNumber (-.x)
+        | VInteger x -> VInteger (-x)
+        | VFloat x -> VFloat (-.x)
         | _ -> raise (Type_error "Can only negate numbers")
         end
 
@@ -292,7 +315,8 @@ and interpret_statement env (stmt: Ast.statement) = match stmt.kind with
         let e = interpret_expr env expr in
         begin match e with
             | VBoolean b -> print_endline (string_of_bool b)
-            | VNumber num -> print_endline (string_of_float num)
+            | VInteger num -> print_endline (string_of_int num)
+            | VFloat num -> print_endline (string_of_float num)
             | VString s -> print_endline s
             | VFunction _ -> raise (Type_error "Unimplemented")
             | VUnit -> raise (Type_error "Cannot print unit type")
