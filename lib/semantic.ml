@@ -26,6 +26,7 @@ let str_of_dt dt =
         | Ast.TInteger -> "int"
         | Ast.TFloat -> "float"
         | Ast.TFunction -> "fn"
+        | Ast.TUnit -> "unit"
 
 let create_new_scope outer_scope = { outer = outer_scope; tbl = Hashtbl.create 11 }
 
@@ -94,6 +95,7 @@ and type_check_binary st (binary: Ast.expr) =
             raise (Type_invalid_operator_error (str_of_dt t1, Ast.string_of_binary_op op, str_of_dt t2, binary.pos))
         else
             begin match t1 with
+                | TUnit -> raise (Type_custom_error ("Cannot add unit types", binary.pos))
                 | TFloat ->
                     begin match op with
                         | Add | Sub | Mul | Div -> Ast.TFloat
@@ -157,16 +159,25 @@ and type_check_call st (exp: Ast.expr) =
 
     match exp.kind with
     | Call (expr, param_exprs) ->
+            print_st st "inside call type check";
             begin match expr with
             (* TODO: FunExpr should also be able to match `fn (str smth){}("hi")` *)
             | { kind = Variable x; _ } ->
-                begin match lookup_st st x with
-                    | Some FunctionSymbol (param_dts, ret_dt_op) ->
-                            loop st param_exprs param_dts; 
-                            begin match ret_dt_op with
-                                | Some x -> x
-                                | None -> failwith "Impossible"
-                            end
+                let aaa = lookup_st st x in
+                begin match aaa with
+                    | Some x -> print_endline (string_of_symbol x)
+                    | _ -> print_endline ("aaaaa")
+                end;
+                begin match aaa with
+                    | Some FunctionSymbol (param_dts, ret_dt_op) -> (
+                        print_endline ("so not here??");
+                        print_st st "inside some functionsymbol match";
+                        loop st param_exprs param_dts;
+                        begin match ret_dt_op with
+                            | Some x -> x
+                            | None -> TUnit
+                        end
+                        )
                     | Some VariableSymbol dt -> raise (Type_custom_error ("Variable of type " ^ str_of_dt dt ^ " not callable", exp.pos))
                     | _ -> raise (Type_custom_error ("Undefined variable not callable", exp.pos))
                 end
@@ -234,14 +245,18 @@ and type_check_statement st (cur_ret_type: Ast.data_type option) (stmt: Ast.stat
     | ReturnStmt _ -> ignore (type_check_return st cur_ret_type stmt);
 
     | VarDeclStmt (dt, name, exp_op) ->
-        insert_st st name (VariableSymbol dt);
         begin match exp_op with
-            | Some exp -> let exp_type = type_check_expr st exp in
-                if types_match_exact dt exp_type then
-                    ()
-                else
-                    raise (Type_mismatch_error (str_of_dt exp_type, str_of_dt dt, exp.pos))
-            | None -> ()
+        | Some { kind = FunExpr (params, return_op, _body); _ } ->
+            let param_dts = List.map (fun p -> fst p) params in
+            let sym = FunctionSymbol (param_dts, return_op) in
+            insert_st st name sym;
+
+        | Some e -> let exp_type = type_check_expr st e in
+            if types_match_exact dt exp_type then
+                insert_st st name (VariableSymbol dt)
+            else
+                raise (Type_mismatch_error (str_of_dt exp_type, str_of_dt dt, e.pos))
+        | None -> ()
         end;
 
     | FunDeclStmt (_name, params, dt_option, body) -> (* most already logged by first pass *)
@@ -277,10 +292,10 @@ and type_check_block st ret_type body =
     let inner_scope: scope = create_new_scope (Some st) in
     type_check_statement_list inner_scope ret_type body
 
-and type_check st ast = type_check_block st (Some TInteger) ast
+and type_check st ast = List.iter (type_check_statement st (Some TInteger)) ast
 
 and collect_statement sym_tbl (stmt: Ast.statement) = match stmt.kind with
-    | Ast.VarDeclStmt (_, name, Some { kind = FunExpr (params, return_op, _body); _ }) ->
+    | Ast.VarDeclStmt (_dt, name, Some { kind = FunExpr (params, return_op, _body); _ }) ->
         let param_dts = List.map (fun p -> fst p) params in
         let sym = FunctionSymbol (param_dts, return_op) in
         insert_st sym_tbl name sym
@@ -303,12 +318,12 @@ and collect_declarations ast =
     in
     let global_scope: scope = { outer = None; tbl =Hashtbl.create 11 } in
     loop global_scope ast;
-    print_st global_scope;
+    print_st global_scope "Collected declarations for type-checking:";
     global_scope
 
 
-and run_type_checking ast =
+and run_type_checking (ast: Ast.block) =
     let st = collect_declarations ast in
     type_check st ast;
-    print_st st
+    print_st st "after type checking st"
 

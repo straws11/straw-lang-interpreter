@@ -4,6 +4,7 @@ type data_type =
     | TBoolean
     | TString
     | TFunction
+    | TUnit
 
 type binary_op =
     | Add
@@ -74,6 +75,7 @@ let string_of_data_type dt = match dt with
     | TBoolean -> "TBoolean"
     | TString -> "TString"
     | TFunction -> "TFunction"
+    | TUnit -> "TUnit"
 
 let string_of_binary_op op = match op with
     | Add -> "+"

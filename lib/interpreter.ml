@@ -69,7 +69,7 @@ exception Type_error of string
         | _ -> None
     )
 
-exception Return_exception of value option (* used for returning *)
+exception Return_exception of value (* used for returning *)
 (* core *)
 
 let rec apply_function env (func: function_value) (args: value list) =
@@ -96,9 +96,7 @@ let rec apply_function env (func: function_value) (args: value list) =
         loop func_scope func.body;
         VUnit
     with
-        | Return_exception v -> match v with
-            | Some x -> x
-            | None -> VUnit
+        | Return_exception v -> v
 
 and interpret_while env expr body =
     let rec run_loop () =
@@ -276,13 +274,10 @@ and interpret_statement env (stmt: Ast.statement) = match stmt.kind with
 
     | WhileStmt (expr, body) -> interpret_while env expr body
 
-    | ReturnStmt (expr_option) ->
-        begin match expr_option with
-            | Some x -> let ex = interpret_expr env x in
-                raise (Return_exception (Some ex))
-            | None -> raise (Return_exception None)
-        end
-
+    | ReturnStmt expr_op -> begin match expr_op with
+        | Some expr -> raise (Return_exception (interpret_expr env expr))
+        | None -> raise (Return_exception VUnit)
+    end
 
     | VarDeclStmt (dt, name, expr_option) ->
         begin match expr_option with

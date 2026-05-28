@@ -2,20 +2,18 @@ float theNum = 5.0
 str words = "stringy"
 bool flag = false
 
-while theNum < 9999.0 {
-    theNum = double(theNum)
-    print(theNum)
-}
-
-print("final value:")
-print(theNum)
-
-//for (int i = 0; i < 5; i = i + 1) {
-//    print("hello")
-//    print(i * 3.1)
+//while theNum < 9999.0 {
+//    theNum = double(theNum)
+//    print(theNum)
 //}
-func clos = fn (int aa, str b) {}
 
-fn double(float val) -> float {
-    return val * 2
-}
+//print("final value:")
+//print(theNum)
+
+
+//fn double(float val) -> float {
+//    return val * 2
+//}
+
+func return_nothing = fn(int a, int b){ int sum = a + b}
+int a = return_nothing(2, 3)
