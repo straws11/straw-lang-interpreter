@@ -154,6 +154,12 @@ and interpret_expr env (expr: Ast.expr)  = match expr.kind with
         let v = interpret_expr env expr in
         interpret_unary unary_op v
 
+    | Logical (expr1, logical_op, expr2) ->
+        let val1 = interpret_expr env expr1 in
+        let val2 = interpret_expr env expr2 in
+        intepret_logical val1 logical_op val2
+
+
     | Assign (var_name, expr) ->
         let v = interpret_expr env expr in
         begin match lookup env var_name with

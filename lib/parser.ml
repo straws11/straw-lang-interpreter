@@ -13,7 +13,9 @@ open Ast
     factor = unary ( ( "/" | "*" ) unary )*
     term = factor ( ( "+" | "-" ) factor )*
     comparison = term ( ( ">" | ">=" | "<" | "<=" | "!=" | "==" ) term )*
-    assignment = IDENTIFIER "=" assignment | comparison
+    logic_and = comparison ( "and" comparison )*
+    logic_or = logic_and ( "or" logic_and )*
+    assignment = IDENTIFIER "=" assignment | logic_or
     expr = assignment
     block = "{" ( statement )* "}"
     if = "if" expr block [ "else" block ]
@@ -337,7 +339,39 @@ and parse_comparison_tail parser left =
         | None -> left (* there is no token at all *)
 
 (*
-    assignment = IDENTIFIER "=" assignment | comparison
+    logic_and = comparison ( "and" comparison )*
+*)
+and parse_logic_and parser =
+    let comp = parse_comparison parser in
+    parse_logical_and_tail parser comp
+
+and parse_logic_and_tail parser left =
+    match peek parser with
+        | Some And ->
+                let position = get_token_pos parser in
+                ignore (advance parser);
+                let right = parse_comparison parser in
+                parse_logic_and_tail parser { kind = Logical (left, AndOp, right); pos = position}
+        | _ -> left
+
+(*
+    logic_or = logic_and ( "or" logic_and )*
+*)
+and parse_logic_or parser =
+    let l_and = parse_logic_and parser in
+    parse_logic_or_tail parser l_and
+
+and parse_logic_or_tail parser left =
+    match peek parser with
+        | Some Or ->
+                let position = get_token_pos parser in
+                ignore (advance parser);
+                let right = parse_logic_and in
+                parse_logic_or_tail parser { kind = Logical (left, OrOp, right); pos = position }
+        | _ -> left
+
+(*
+    assignment = IDENTIFIER "=" assignment | logic_or
 *)
 and parse_assignment parser: Ast.expr =
     match peek parser with
@@ -349,9 +383,9 @@ and parse_assignment parser: Ast.expr =
                     ignore (advance parser);
                     let assignment = parse_assignment parser in
                     { kind = Assign (id, assignment); pos = position }
-                | _ -> parse_comparison parser
+                | _ -> parse_logic_or parser
                 end
-        | _ -> parse_comparison parser
+        | _ -> parse_logic_or parser
 
 (*
     expr = assignment

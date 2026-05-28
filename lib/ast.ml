@@ -22,6 +22,10 @@ type unary_op =
     | Not
     | Negate
 
+type logical_op =
+    | AndOp
+    | OrOp
+
 type expr_kind =
     | FloatLit of float
     | IntLit of int
@@ -33,6 +37,7 @@ type expr_kind =
 
     | Binary of expr * binary_op * expr
     | Unary of unary_op * expr
+    | Logical of expr * logical_op * expr
 
     | Assign of string * expr
     | FunExpr of parameter list * data_type option * block
@@ -93,6 +98,10 @@ let string_of_unary_op op = match op with
     | Not -> "!"
     | Negate -> "-"
 
+let string_of_logical_op op = match op with
+    | AndOp -> "and"
+    | OrOp -> "or"
+
 let rec string_of_param_list depth params =
     let rec loop acc rest = match rest with
         | (dt, id) :: t -> let str =
@@ -127,6 +136,12 @@ let rec string_of_expr depth expr =
     | Unary (un_op, expr) -> "Unary(\n"
         ^ string_of_unary_op un_op
         ^ string_of_expr (depth + 1) expr ^ "\n"
+        ^ indent depth ^ ")"
+
+    | Logical (expr1, op, expr2) -> "Logical(\n"
+        ^ string_of_expr (depth + 1) expr1 ^ "\n"
+        ^ ind ^ string_of_logical_op op ^ "\n"
+        ^ string_of_expr (depth + 1) expr2 ^ "\n"
         ^ indent depth ^ ")"
 
     | Assign (s, e) -> "Assign(\n"
