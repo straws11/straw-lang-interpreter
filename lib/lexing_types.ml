@@ -9,6 +9,8 @@ type token_kind =
     | RParen
     | LBrace
     | RBrace
+    | LBrack
+    | RBrack
     | Comma
     | Dot
     | Plus
@@ -65,6 +67,8 @@ let string_of_token token_type = match token_type with
     | RParen -> "RParen"
     | LBrace -> "LBrace"
     | RBrace -> "RBrace"
+    | LBrack -> "LBrack"
+    | RBrack -> "RBrack"
     | Comma -> "Comma"
     | Dot -> "Dot"
     | Plus -> "Plus"

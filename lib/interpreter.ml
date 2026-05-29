@@ -3,12 +3,14 @@ open Interpret_types
 
 (* help *)
 
-let v_type_to_t_type v_var = match v_var with
+let rec v_type_to_t_type v_var = match v_var with
     | VInteger _ -> TInteger
     | VFloat _ -> TFloat
     | VBoolean _ -> TBoolean
-    | VFunction _ -> TFunction
     | VString _ -> TString
+    (* BUG: this next line is probably wrong, what if array is empty *)
+    | VArray vals -> TArray (v_type_to_t_type vals.(0))
+    | VFunction _ -> TFunction
     | VUnit -> failwith "Impossible"
 
 let value_has_right_type v t = match v, t with
@@ -62,10 +64,10 @@ let update env name new_v =
 
 
 (* error *)
-exception Type_error of string
+exception Runtime_error of string
 
     let () = Printexc.register_printer (function
-        | Type_error (s) -> Some (Printf.sprintf "TypeError: %s" s)
+        | Runtime_error (s) -> Some (Printf.sprintf "TypeError: %s" s)
         | _ -> None
     )
 
@@ -76,7 +78,7 @@ let rec apply_function env (func: function_value) (args: value list) =
     (*let param_types = List.map (fun element -> fst element) func.params in
     List.iter2 (fun actual_val expected_type -> (
         if not (value_has_right_type actual_val expected_type) then
-            raise (Type_error "Argument type doesn't match parameter type")
+            raise (Runtime_error "Argument type doesn't match parameter type")
     )) args param_types;*)
 
     let rec insert_params env params rem = match params, rem with
@@ -107,7 +109,7 @@ and interpret_while env expr body =
                 run_loop ()
             | VBoolean false -> ()
 
-            | _ -> raise (Type_error "Expression should be of type boolean")
+            | _ -> raise (Runtime_error "Expression should be of type boolean")
     in
     run_loop ()
 
@@ -122,19 +124,31 @@ and interpret_if env expr body else_body =
                 | None -> ()
                 end
 
-        | _ -> raise (Type_error "Expression should be of type boolean")
+        | _ -> raise (Runtime_error "Expression should be of type boolean")
 
+and interpret_index env var idx =
+    let arr = match var with
+        | VArray vals -> vals
+        | _ -> raise (Runtime_error "Shouldn't happen")
+    in
+    let idx_num = match idx with
+        | VInteger x -> x
+        | _ -> raise (Runtime_error "Shouldn't happen")
+    in
+
+    arr.(idx_num)
 
 and interpret_expr env (expr: Ast.expr)  = match expr.kind with
     | IntLit x -> VInteger x
     | FloatLit x -> VFloat x
     | BoolLit x -> VBoolean x
     | StrLit x -> VString x
+    | ArrayContent x -> VArray (Array.map (interpret_expr env) x)
 
     | Variable x -> begin match lookup env x with
         | Some Some v -> v
-        | Some None -> raise (Type_error ("Variable " ^ x ^ " is uninitialized"))
-        | _ -> raise (Type_error ("Unknown variable " ^ x))
+        | Some None -> raise (Runtime_error ("Variable " ^ x ^ " is uninitialized"))
+        | _ -> raise (Runtime_error ("Unknown variable " ^ x))
         end
 
     | Call (fun_expr, expr_list) ->
@@ -142,8 +156,15 @@ and interpret_expr env (expr: Ast.expr)  = match expr.kind with
         let arg_vals = List.map (interpret_expr env) expr_list in
         begin match f with
             | VFunction x -> apply_function env x arg_vals
-            | _ -> raise (Type_error "Not callable")
+            | _ -> raise (Runtime_error "Not callable")
         end
+
+    | Index (exp1, exp2) ->
+            let var = interpret_expr env exp1 in
+            let idx = interpret_expr env exp2 in
+            interpret_index env var idx
+
+    | StructAccess (exp, id) -> raise (Runtime_error "Unimplemented")
 
     | Binary (expr1, binary_op, expr2) ->
         let val1 = interpret_expr env expr1 in
@@ -166,7 +187,7 @@ and interpret_expr env (expr: Ast.expr)  = match expr.kind with
             | Some Some x when types_match v x -> ()
             (* TODO: here is where type should be checked but i don't have it rn *)
             | Some None -> ()
-            | _ -> raise (Type_error "Variable doesn't exist, cannot assign")
+            | _ -> raise (Runtime_error "Variable doesn't exist, cannot assign")
         end;
         update env var_name v;
         v
@@ -188,7 +209,7 @@ and interpret_binary v1 op v2 = match op with
         | VFloat x, VInteger y -> VFloat (x +. Float.of_int y)
         | VInteger x, VFloat y -> VFloat (Float.of_int x +. y)
         | VString x, VString y -> VString (x ^ y)
-        | _ -> raise (Type_error "Invalid operator for types")
+        | _ -> raise (Runtime_error "Invalid operator for types")
         end
 
     | Sub -> begin match (v1, v2) with
@@ -196,7 +217,7 @@ and interpret_binary v1 op v2 = match op with
         | VFloat x, VFloat y -> VFloat (x -. y)
         | VFloat x, VInteger y -> VFloat (x -. Float.of_int y)
         | VInteger x, VFloat y -> VFloat (Float.of_int x -. y)
-        | _ -> raise (Type_error "Invalid operator for types")
+        | _ -> raise (Runtime_error "Invalid operator for types")
         end
 
     | Mul -> begin match (v1, v2) with
@@ -204,7 +225,7 @@ and interpret_binary v1 op v2 = match op with
         | VFloat x, VFloat y -> VFloat (x *. y)
         | VFloat x, VInteger y -> VFloat (x *. Float.of_int y)
         | VInteger x, VFloat y -> VFloat (Float.of_int x *. y)
-        | _ -> raise (Type_error "Invalid operator for types")
+        | _ -> raise (Runtime_error "Invalid operator for types")
         end
 
     | Div -> begin match (v1, v2) with
@@ -212,7 +233,7 @@ and interpret_binary v1 op v2 = match op with
         | VFloat x, VFloat y -> VFloat (x /. y)
         | VFloat x, VInteger y -> VFloat (x /. Float.of_int y)
         | VInteger x, VFloat y -> VFloat (Float.of_int x /. y)
-        | _ -> raise (Type_error "Invalid operator for types")
+        | _ -> raise (Runtime_error "Invalid operator for types")
         end
 
     | NotEqual -> begin match (v1, v2) with
@@ -220,7 +241,7 @@ and interpret_binary v1 op v2 = match op with
         | VFloat x, VFloat y -> VBoolean (x != y)
         | VBoolean x, VBoolean y -> VBoolean (x != y)
         | VString x, VString y -> VBoolean (not (String.equal x y))
-        | _ -> raise (Type_error "Invalid operator for types")
+        | _ -> raise (Runtime_error "Invalid operator for types")
         end
 
     | EqualOp -> begin match (v1, v2) with
@@ -228,7 +249,7 @@ and interpret_binary v1 op v2 = match op with
         | VFloat x, VFloat y -> VBoolean (x = y)
         | VBoolean x, VBoolean y -> VBoolean (x = y)
         | VString x, VString y -> VBoolean (String.equal x y)
-        | _ -> raise (Type_error "Invalid operator for types")
+        | _ -> raise (Runtime_error "Invalid operator for types")
         end
 
     | LessOp -> begin match (v1, v2) with
@@ -236,7 +257,7 @@ and interpret_binary v1 op v2 = match op with
         | VFloat x, VFloat y -> VBoolean (x < y)
         | VBoolean x, VBoolean y -> VBoolean (x < y)
         | VString x, VString y -> VBoolean (x < y)
-        | _ -> raise (Type_error "Invalid operator for types")
+        | _ -> raise (Runtime_error "Invalid operator for types")
         end
 
     | LessEqualOp -> begin match (v1, v2) with
@@ -244,7 +265,7 @@ and interpret_binary v1 op v2 = match op with
         | VFloat x, VFloat y -> VBoolean (x <= y)
         | VBoolean x, VBoolean y -> VBoolean (x <= y)
         | VString x, VString y -> VBoolean (x <= y)
-        | _ -> raise (Type_error "Invalid operator for types")
+        | _ -> raise (Runtime_error "Invalid operator for types")
         end
 
     | GreaterOp -> begin match (v1, v2) with
@@ -252,7 +273,7 @@ and interpret_binary v1 op v2 = match op with
         | VFloat x, VFloat y -> VBoolean (x > y)
         | VBoolean x, VBoolean y -> VBoolean (x > y)
         | VString x, VString y -> VBoolean (x > y)
-        | _ -> raise (Type_error "Invalid operator for types")
+        | _ -> raise (Runtime_error "Invalid operator for types")
         end
 
     | GreaterEqualOp -> begin match (v1, v2) with
@@ -260,19 +281,19 @@ and interpret_binary v1 op v2 = match op with
         | VFloat x, VFloat y -> VBoolean (x >= y)
         | VBoolean x, VBoolean y -> VBoolean (x >= y)
         | VString x, VString y -> VBoolean (x >= y)
-        | _ -> raise (Type_error "Invalid operator for types")
+        | _ -> raise (Runtime_error "Invalid operator for types")
         end
 
 and interpret_unary op v = match op with
     | Not -> begin match v with
         | VBoolean x -> VBoolean (not x)
-        | _ -> raise (Type_error "Can only not booleans")
+        | _ -> raise (Runtime_error "Can only not booleans")
         end
 
     | Negate -> begin match v with
         | VInteger x -> VInteger (-x)
         | VFloat x -> VFloat (-.x)
-        | _ -> raise (Type_error "Can only negate numbers")
+        | _ -> raise (Runtime_error "Can only negate numbers")
         end
 
 and interpret_logical v1 op v2 = match op with
@@ -303,7 +324,7 @@ and interpret_statement env (stmt: Ast.statement) = match stmt.kind with
                 if value_has_right_type exp dt then
                         insert env name exp
                 else
-                    raise (Type_error ("Incompatible types "
+                    raise (Runtime_error ("Incompatible types "
                         ^ string_of_data_type (v_type_to_t_type exp)
                         ^ " and " ^ string_of_data_type dt))
             | None -> insert_empty env name;
@@ -331,8 +352,11 @@ and interpret_statement env (stmt: Ast.statement) = match stmt.kind with
             | VInteger num -> print_endline (string_of_int num)
             | VFloat num -> print_endline (string_of_float num)
             | VString s -> print_endline s
-            | VFunction _ -> raise (Type_error "Unimplemented")
-            | VUnit -> raise (Type_error "Cannot print unit type")
+            | VArray vals -> print_endline ("[" ^ (String.concat ", " (
+                List.map string_of_value (Array.to_list vals)
+                )) ^ "]")
+            | VFunction _ -> raise (Runtime_error "Unimplemented")
+            | VUnit -> raise (Runtime_error "Cannot print unit type")
         end
 
 

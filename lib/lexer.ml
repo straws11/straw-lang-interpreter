@@ -117,6 +117,8 @@ let next_token lexer =
             | ')' -> Lexing_types.RParen
             | '{' -> Lexing_types.LBrace
             | '}' -> Lexing_types.RBrace
+            | '[' -> Lexing_types.LBrack
+            | ']' -> Lexing_types.RBrack
             | ',' -> Lexing_types.Comma
             | '.' -> Lexing_types.Dot
             | '+' -> Lexing_types.Plus

@@ -3,6 +3,7 @@ type data_type =
     | TFloat
     | TBoolean
     | TString
+    | TArray of data_type
     | TFunction
     | TUnit
 
@@ -31,9 +32,12 @@ type expr_kind =
     | IntLit of int
     | BoolLit of bool
     | StrLit of string
+    | ArrayContent of expr array
 
     | Variable of string
     | Call of expr * expr list
+    | Index of expr * expr
+    | StructAccess of expr * string
 
     | Binary of expr * binary_op * expr
     | Unary of unary_op * expr
@@ -80,11 +84,12 @@ let block depth lines = String.concat "\n" lines
 
 let render_list depth render xs = xs |> List.map (render depth) |> String.concat ",\n"
 
-let string_of_data_type dt = match dt with
+let rec string_of_data_type dt = match dt with
     | TInteger -> "TInteger"
     | TFloat -> "TFloat"
     | TBoolean -> "TBoolean"
     | TString -> "TString"
+    | TArray d -> "TArray of " ^ string_of_data_type d
     | TFunction -> "TFunction"
     | TUnit -> "TUnit"
 
@@ -118,13 +123,18 @@ let string_of_param_list depth params =
         [line depth "]"]
     )
 
-
 let rec string_of_expr depth expr =
     match expr.kind with
     | IntLit x -> line depth ("IntLit(" ^ string_of_int x ^ ")")
     | FloatLit x -> line depth ("FloatLit(" ^ string_of_float x ^ ")")
     | BoolLit x -> line depth ("BoolLit(" ^ string_of_bool x ^ ")")
     | StrLit x -> line depth ("StrLit(" ^ x ^ ")")
+    | ArrayContent contents ->
+        block depth [
+                line depth "ArrayContent(";
+                line depth (String.concat ",\n" (Array.to_list (Array.map (string_of_expr (depth + 1)) contents)));
+                line depth ")";
+        ]
     | Variable x -> line depth ("Variable(" ^ x ^ ")")
 
     | Call (callee, args) ->
@@ -142,6 +152,22 @@ let rec string_of_expr depth expr =
                 line depth ")";
             ]
         )
+
+    | Index (e, y) ->
+        block depth [
+            line depth "Index(";
+            string_of_expr (depth + 1) e;
+            string_of_expr (depth + 1) y;
+            line depth ")"
+        ]
+
+    | StructAccess (e, id) ->
+        block depth [
+            line depth "StructAccess(";
+            string_of_expr (depth + 1) e;
+            line depth id;
+            line depth ")"
+        ]
 
     | Unary (op, e) ->
         block depth [

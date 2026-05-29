@@ -19,16 +19,20 @@ let types_match t1 t2 =
         | Ast.TInteger, Ast.TFloat -> true
         | _ -> false
 
-let str_of_dt dt =
+let rec str_of_dt dt =
     match dt with
         | Ast.TBoolean -> "bool"
         | Ast.TString -> "str"
         | Ast.TInteger -> "int"
         | Ast.TFloat -> "float"
+        | Ast.TArray x -> "array[" ^ str_of_dt x ^ "]"
         | Ast.TFunction -> "fn"
         | Ast.TUnit -> "unit"
 
 let create_new_scope outer_scope = { outer = outer_scope; tbl = Hashtbl.create 11 }
+
+let safe_array_get arr i =
+    if i >= 0 && i < Array.length arr then Some arr.(i) else None
 
 (* error *)
 exception Type_mismatch_error of string * string * Lexing_types.position
@@ -121,6 +125,8 @@ and type_check_binary st (binary: Ast.expr) =
                         | Div | Sub | Mul -> raise (Type_invalid_operator_error (Ast.string_of_binary_op op, str_of_dt t1, str_of_dt t2, binary.pos))
                         | _ -> Ast.TBoolean
                     end
+                | TArray dt -> raise (Type_invalid_operator_error (Ast.string_of_binary_op op, str_of_dt t1, str_of_dt t2, binary.pos))
+
                 end
     | _ -> failwith "Impossible"
 
@@ -194,11 +200,27 @@ and type_check_call st (exp: Ast.expr) =
 
 
 
+and type_check_array_content st (contents: Ast.expr array) =
+    let rec loop idx ty rem = match rem with
+        | h :: t ->
+            if ty = h then
+                loop (idx + 1) ty t
+            else
+                raise (Type_mismatch_error (str_of_dt h, str_of_dt ty, contents.(idx).pos))
+        | [] -> ()
+    in
+    let dts = Array.map (type_check_expr st) contents in
+
+    match safe_array_get dts 0 with
+        | Some dt -> loop 0 dt (Array.to_list dts); dt
+        | None -> failwith "array empty, how should I get the type??"
+
 and type_check_expr st (exp: Ast.expr) = match exp.kind with
     | IntLit x -> Ast.TInteger
     | FloatLit x -> Ast.TFloat
     | BoolLit x -> Ast.TBoolean
     | StrLit x -> Ast.TString
+    | ArrayContent x -> type_check_array_content st x
 
     | Variable x ->
         begin match get_var_type st x with
@@ -208,6 +230,21 @@ and type_check_expr st (exp: Ast.expr) = match exp.kind with
 
     (* TODO: nesting of this and typecheck params *)
     | Call (_, _) -> type_check_call st exp
+
+    | Index (exp1, exp2) ->
+            let t1 = type_check_expr st exp1 in
+            let t2 = type_check_expr st exp2 in
+            begin match t1, t2 with
+                | TArray dt, TInteger -> dt
+                | TArray _, x -> raise (Type_custom_error ("Invalid expression type " ^ str_of_dt x ^ " for array index", exp2.pos))
+                | x, _ -> raise (Type_custom_error ("Cannot index into value of type " ^ str_of_dt x, exp1.pos))
+            end
+
+    | StructAccess (exp, id) ->
+            (* TODO: unimplemented - structs don't exist *)
+            let t = type_check_expr st exp in
+            t
+
     | Binary (_, _, _) -> type_check_binary st exp
     | Unary (_, _) -> type_check_unary st exp
     | Logical (_, _, _) -> type_check_logical st exp

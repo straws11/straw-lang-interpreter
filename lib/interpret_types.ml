@@ -9,6 +9,7 @@ type value =
         | VFloat of float
         | VBoolean of bool
         | VString of string
+        | VArray of value array
         | VFunction of function_value
         | VUnit
 
@@ -33,6 +34,9 @@ let rec string_of_value v = match v with
         | VFloat f -> string_of_float f
         | VBoolean b -> string_of_bool b
         | VString s -> s
+        | VArray vals -> "[" ^ (String.concat ", " (
+                List.map string_of_value (Array.to_list vals)
+                )) ^ "]"
         | VFunction f -> string_of_function f
         | VUnit -> "unit value"
 

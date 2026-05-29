@@ -6,10 +6,11 @@ open Ast
     function_params = [ data_type IDENTIFIER ( "," data_type IDENTIFIER )* ]
     function_expr = "fn" "(" function_params ")" [ "->" data_type ] block
     function_decl = "fn" IDENTIFIER "(" function_params ")" [ "->" data_type ] block
-    primary = INTEGER | FLOAT | STRING | BOOLEAN | IDENTIFIER | function_expr | "(" expr ")"
+    array_content = "[" [ primary ( "," primary )* ]"]"
+    primary = INTEGER | FLOAT | STRING | BOOLEAN | IDENTIFIER | array_content | function_expr | "(" expr ")"
     expr_list = expr ( "," expr )*
-    call = primary ( "(" expr_list ")" )*
-    unary = ( "!" | "-" ) unary | call
+    postfix = primary ( "(" expr_list ")" | "[" expr "]" | "." IDENTIFIER )*
+    unary = ( "!" | "-" ) unary | postfix
     factor = unary ( ( "/" | "*" ) unary )*
     term = factor ( ( "+" | "-" ) factor )*
     comparison = term ( ( ">" | ">=" | "<" | "<=" | "!=" | "==" ) term )*
@@ -125,7 +126,7 @@ let expect_id parser = match advance parser with
 
 (* TODO: should this be called starts_call?? *)
 let starts_primary tok = match tok with
-    | Identifier _ | String _ | Boolean _ | Integer _ | FloatPoint _ | Fn | LParen -> true
+    | Identifier _ | String _ | Boolean _ | Integer _ | FloatPoint _ | Fn | LBrack | LParen -> true
     | _ -> false
 
 let starts_declaration tok = match tok with
@@ -201,7 +202,28 @@ and parse_function_decl parser =
     { kind = FunDeclStmt (id, params, dt, block); pos = position }
 
 (*
-    primary = INTEGER | FLOAT | STRING | BOOLEAN | IDENTIFIER | function_expr | "(" expr ")"
+    array_content = "[" [ primary ( "," primary )* ] "]"
+*)
+and parse_array_content parser =
+    let rec loop acc =
+        if consume parser Comma then
+            let p = parse_primary parser in
+            loop (p :: acc)
+        else
+            List.rev acc
+    in
+
+    match peek parser with
+        | Some x when starts_primary x ->
+                let prim = parse_primary parser in
+                let contents = loop [prim] in
+                expect parser RBrack "Unclosed array";
+                ArrayContent (Array.of_list contents)
+
+        | _ -> raise (Parse_error ("Expected array initializer", get_token_pos parser))
+
+(*
+    primary = INTEGER | FLOAT | STRING | BOOLEAN | IDENTIFIER | array_content | function_expr | "(" expr ")"
 *)
 and parse_primary parser =
     match peek parser with
@@ -215,6 +237,7 @@ and parse_primary parser =
             | FloatPoint x -> FloatLit x
             | Boolean x -> BoolLit x
             | Identifier x -> Variable x
+            | LBrack -> parse_array_content parser
             | LParen ->
                 let expr = parse_expr parser in
                 expect parser RParen "Expected ')' after expression";
@@ -244,25 +267,35 @@ and parse_expr_list parser =
 
 
 (*
-    call = primary ( "(" expr_list ")" )*
+    postfix = primary ( "(" expr_list ")" | "[" expr "]" | "." IDENTIFIER )*
 *)
-and parse_call parser =
+and parse_postfix parser =
     let primary = parse_primary parser in
-    parse_call_tail parser primary
+    parse_postfix_tail parser primary
 
-and parse_call_tail parser inner =
+and parse_postfix_tail parser inner =
     match peek parser with
         | Some LParen -> let position = get_token_pos parser in
             let expr_list =
             ignore (advance parser);
             parse_expr_list parser in
             expect parser RParen "Unclosed function call";
-            parse_call_tail parser ({ kind = Call (inner, expr_list); pos = position })
+            parse_postfix_tail parser ({ kind = Call (inner, expr_list); pos = position })
+        | Some LBrack ->
+            let position = get_token_pos parser in
+            let expr = ignore (advance parser);
+            parse_expr parser in
+            expect parser RBrack "Unclosed array index";
+            parse_postfix_tail parser ({ kind = Index (inner, expr); pos = position })
+        | Some Dot ->
+                let position = get_token_pos parser in
+                let id = ignore (advance parser); expect_id parser in
+                parse_postfix_tail parser ({ kind = StructAccess (inner, id); pos = position })
         | _ -> inner
 
 (*
     unary = ( "!" | "-" ) unary
-        | call
+        | postfix
 *)
 and parse_unary parser : Ast.expr =
     match peek parser with
@@ -273,7 +306,7 @@ and parse_unary parser : Ast.expr =
                     ignore (advance parser);
                     let un = parse_unary parser in
                     { kind = Unary (op, un); pos = position }
-            | None -> parse_call parser
+            | None -> parse_postfix parser
         end
     | None -> failwith "TODO Unexpected end of input. Expected unary."
 
