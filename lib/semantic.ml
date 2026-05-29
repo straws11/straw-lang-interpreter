@@ -1,11 +1,12 @@
 open Semantic_types
 
 (* helpers *)
-let types_match_exact t1 t2 = match t1, t2 with
+let rec types_match_exact t1 t2 = match t1, t2 with
     | Ast.TBoolean, Ast.TBoolean -> true
     | Ast.TInteger, Ast.TInteger -> true
     | Ast.TFloat, Ast.TFloat -> true
     | Ast.TString, Ast.TString -> true
+    | Ast.TArray x, Ast.TArray y -> types_match_exact x y
     | Ast.TFunction, Ast.TFunction -> true
     | _ -> false
 
@@ -25,7 +26,7 @@ let rec str_of_dt dt =
         | Ast.TString -> "str"
         | Ast.TInteger -> "int"
         | Ast.TFloat -> "float"
-        | Ast.TArray x -> "array[" ^ str_of_dt x ^ "]"
+        | Ast.TArray x ->  str_of_dt x ^ "[]"
         | Ast.TFunction -> "fn"
         | Ast.TUnit -> "unit"
 
@@ -212,7 +213,7 @@ and type_check_array_content st (contents: Ast.expr array) =
     let dts = Array.map (type_check_expr st) contents in
 
     match safe_array_get dts 0 with
-        | Some dt -> loop 0 dt (Array.to_list dts); dt
+        | Some dt -> loop 0 dt (Array.to_list dts); Ast.TArray dt
         | None -> failwith "array empty, how should I get the type??"
 
 and type_check_expr st (exp: Ast.expr) = match exp.kind with

@@ -13,11 +13,12 @@ let rec v_type_to_t_type v_var = match v_var with
     | VFunction _ -> TFunction
     | VUnit -> failwith "Impossible"
 
-let value_has_right_type v t = match v, t with
+let rec value_has_right_type v t = match v, t with
     | VInteger _, TInteger -> true
     | VFloat _, TFloat -> true
     | VBoolean _, TBoolean -> true
     | VString _, TString -> true
+    | VArray x, TArray dt -> value_has_right_type x.(0) dt
     | VFunction _, TFunction -> true
     | _ -> false
 
@@ -327,6 +328,7 @@ and interpret_statement env (stmt: Ast.statement) = match stmt.kind with
                     raise (Runtime_error ("Incompatible types "
                         ^ string_of_data_type (v_type_to_t_type exp)
                         ^ " and " ^ string_of_data_type dt))
+
             | None -> insert_empty env name;
             end
 
@@ -371,10 +373,10 @@ and interpret_block env (ast: block): unit =
             tbl = Hashtbl.create 11;
     }
     in
-    print_endline "enter block";
+    (* print_endline "enter block"; *)
     loop new_scope ast;
-    print_endline "After block interpretation";
-    print_env new_scope
+    (* print_endline "After block interpretation"; *)
+    (* print_env new_scope *)
 
 and collect_statement env (stmt: Ast.statement) = match stmt.kind with
     | Ast.VarDeclStmt (_, name, Some { kind = FunExpr (params, return_op, body); _ }) ->

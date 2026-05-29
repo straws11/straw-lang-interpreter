@@ -1,1 +1,18 @@
-[1, 2]
+int[] a = [91, 123, 123, 342, 12, 421]
+int i = 0
+while i < 6 {
+    print(a[i])
+    i = i + 1
+}
+
+fn reverse(int[] nums) -> int[] {
+    int[] new_nums = [-1, -1, -1, -1, -1, -1]
+    for (int i = 0; i < 6; i = i + 1) {
+        new_nums[i] = nums[6 - i - 1]
+    }
+    return new_nums
+}
+
+int[] b = reverse(a)
+print(b)
+

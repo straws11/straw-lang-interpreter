@@ -6,7 +6,7 @@ open Ast
     function_params = [ data_type IDENTIFIER ( "," data_type IDENTIFIER )* ]
     function_expr = "fn" "(" function_params ")" [ "->" data_type ] block
     function_decl = "fn" IDENTIFIER "(" function_params ")" [ "->" data_type ] block
-    array_content = "[" [ primary ( "," primary )* ]"]"
+    array_content = "[" [ expr ( "," expr )* ]"]"
     primary = INTEGER | FLOAT | STRING | BOOLEAN | IDENTIFIER | array_content | function_expr | "(" expr ")"
     expr_list = expr ( "," expr )*
     postfix = primary ( "(" expr_list ")" | "[" expr "]" | "." IDENTIFIER )*
@@ -16,7 +16,7 @@ open Ast
     comparison = term ( ( ">" | ">=" | "<" | "<=" | "!=" | "==" ) term )*
     logic_and = comparison ( "and" comparison )*
     logic_or = logic_and ( "or" logic_and )*
-    assignment = IDENTIFIER "=" assignment | logic_or
+    assignment = IDENTIFIER [ "[" expr "]" ] "=" assignment | logic_or
     expr = assignment
     block = "{" ( statement )* "}"
     if = "if" expr block [ "else" block ]
@@ -26,7 +26,7 @@ open Ast
     for = "for" "(" for_initializer ";" for_condition ";" for_increment ")" block
     while = "while" expr block
     return = "return" [ expr ]
-    data_type = ( int | float | bool | str | func )
+    data_type = ( int | float | bool | str | func ) ( [ "[" "]" ] ) *
     declaration = data_type IDENTIFIER [ "=" expr ]
     print = "print" "(" expr ")"
     statement = ( if | for | while | return | declaration | function_decl | expr_stmt | print )
@@ -202,25 +202,24 @@ and parse_function_decl parser =
     { kind = FunDeclStmt (id, params, dt, block); pos = position }
 
 (*
-    array_content = "[" [ primary ( "," primary )* ] "]"
+    array_content = "[" [ expr ( "," expr )* ] "]"
 *)
 and parse_array_content parser =
     let rec loop acc =
         if consume parser Comma then
-            let p = parse_primary parser in
+            let p = parse_expr parser in
             loop (p :: acc)
         else
             List.rev acc
     in
 
-    match peek parser with
-        | Some x when starts_primary x ->
-                let prim = parse_primary parser in
-                let contents = loop [prim] in
-                expect parser RBrack "Unclosed array";
-                ArrayContent (Array.of_list contents)
-
-        | _ -> raise (Parse_error ("Expected array initializer", get_token_pos parser))
+    if starts_expr parser then
+        let ex = parse_expr parser in
+        let contents = loop [ex] in
+        expect parser RBrack "Unclosed array";
+        ArrayContent (Array.of_list contents)
+    else
+        raise (Parse_error ("Expected array initializer", get_token_pos parser))
 
 (*
     primary = INTEGER | FLOAT | STRING | BOOLEAN | IDENTIFIER | array_content | function_expr | "(" expr ")"
@@ -401,12 +400,13 @@ and parse_logic_or_tail parser left =
         | _ -> left
 
 (*
-    assignment = IDENTIFIER "=" assignment | logic_or
+    assignment = IDENTIFIER [ "[" expr "]" ] "=" assignment | logic_or
 *)
 and parse_assignment parser: Ast.expr =
     match peek parser with
         | Some Identifier id ->
             begin match peek_next parser with
+                | Some LBrack ->
                 | Some Equal ->
                     ignore (advance parser);
                     let position = get_token_pos parser in
@@ -553,16 +553,26 @@ and parse_return parser =
 
         | _ -> { kind = ReturnStmt None; pos = unit_return_pos }
 (*
-    data_type = ( int | float | bool | str | func )
+    data_type = ( int | float | bool | str | func ) ( [ "[" "]" ] ) *
 *)
 and parse_data_type parser =
-    match advance parser with
+    let rec loop inner = match peek parser with
+        | Some LBrack ->
+            ignore (advance parser);
+            expect parser RBrack "Unexpected '['";
+            TArray (loop inner)
+        | _ -> inner
+    in
+
+    let base_type = match advance parser with
         | Some Int -> TInteger
         | Some Float -> TFloat
         | Some Bool -> TBoolean
         | Some Str -> TString
         | Some Func -> TFunction
         | _ -> raise (Parse_error ("Data type expected", get_token_pos parser))
+    in
+    loop base_type
 
 (*
     declaration = data_type IDENTIFIER [ "=" expr ]
