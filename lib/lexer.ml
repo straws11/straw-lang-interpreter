@@ -56,9 +56,20 @@ let match_char lexer expected = match peek lexer with
         true
     | _ -> false
 
-let rec skip_comment lexer = match peek lexer with
-    | Some '\n' | None -> ()
-    | _ -> ignore (advance lexer); skip_comment lexer
+let rec skip_single_comment lexer = match peek lexer with
+    | Some '\n' -> ignore (advance lexer);
+    | None -> ()
+    | _ -> ignore (advance lexer); skip_single_comment lexer
+
+let rec skip_multi_comment lexer = match peek lexer with
+    | Some '*' -> ignore (advance lexer);
+        begin match peek lexer with
+            | Some '/' -> ignore (advance lexer);
+        | None -> ()
+        | _ -> skip_multi_comment lexer
+        end
+    | None -> ()
+    | _ -> ignore (advance lexer); skip_multi_comment lexer
 
 (* core *)
 
@@ -124,10 +135,14 @@ let next_token lexer =
             | '+' -> Lexing_types.Plus
             | ';' -> Lexing_types.Semicolon
             | '/' -> if match_char lexer '/' then
-                    (skip_comment lexer;
+                    (skip_single_comment lexer;
+                    next_token_kind lexer)
+                else if match_char lexer '*' then
+                    (skip_multi_comment lexer;
                     next_token_kind lexer)
                 else
                     Lexing_types.Slash
+
             | '*' -> Lexing_types.Star
             | '!' -> if match_char lexer '=' then
                     Lexing_types.BangEqual

@@ -16,7 +16,7 @@ open Ast
     comparison = term ( ( ">" | ">=" | "<" | "<=" | "!=" | "==" ) term )*
     logic_and = comparison ( "and" comparison )*
     logic_or = logic_and ( "or" logic_and )*
-    assignment = IDENTIFIER [ "[" expr "]" ] "=" assignment | logic_or
+    assignment = logic_or [ "=" assignment ]
     expr = assignment
     block = "{" ( statement )* "}"
     if = "if" expr block [ "else" block ]
@@ -133,13 +133,8 @@ let starts_declaration tok = match tok with
     | Int | Float | Str | Bool | Func -> true
     | _ -> false
 
-let starts_assignment parser = match peek parser with
-    | Some Identifier _ -> peek_next parser = Some Equal
-    | _ -> false
-
 let starts_expr parser = match peek parser with
     | Some x when starts_primary x -> true
-    | Some _ when starts_assignment parser -> true
     | Some Bang | Some Minus -> true
     | _ -> false
 
@@ -400,22 +395,19 @@ and parse_logic_or_tail parser left =
         | _ -> left
 
 (*
-    assignment = IDENTIFIER [ "[" expr "]" ] "=" assignment | logic_or
+    assignment = logic_or [ "=" assignment ]
 *)
 and parse_assignment parser: Ast.expr =
-    match peek parser with
-        | Some Identifier id ->
-            begin match peek_next parser with
-                | Some LBrack ->
-                | Some Equal ->
-                    ignore (advance parser);
-                    let position = get_token_pos parser in
-                    ignore (advance parser);
-                    let assignment = parse_assignment parser in
-                    { kind = Assign (id, assignment); pos = position }
-                | _ -> parse_logic_or parser
-                end
-        | _ -> parse_logic_or parser
+    let lhs = parse_logic_or parser in
+    if peek parser = Some Equal then
+        let position = get_token_pos parser in
+        ignore (advance parser);
+        let rhs = parse_assignment parser in
+        match lhs.kind with
+        | Variable _ | Index (_, _) -> { kind = Assign (lhs, rhs); pos = position }
+        | _ -> raise (Parse_error ("Cannot assign to expr of this kind", lhs.pos))
+    else
+        lhs
 
 (*
     expr = assignment
@@ -462,7 +454,7 @@ and parse_if parser =
 and parse_for_initializer parser =
     match peek parser with
         | Some x when starts_declaration x -> Some (parse_declaration parser)
-        | Some x when starts_assignment parser -> Some ({
+        | Some x when starts_expr parser -> Some ({
             kind = ExprStmt (parse_assignment parser); pos = get_token_pos parser
             })
         | _ -> None

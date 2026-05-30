@@ -139,6 +139,20 @@ and interpret_index env var idx =
 
     arr.(idx_num)
 
+and interpret_assignment env (lhs_expr: Ast.expr) (rhs_expr: Ast.expr) =
+    let v = interpret_expr env rhs_expr in
+    match lhs_expr.kind with
+        | Index (arr_expr, idx_expr) ->
+            let arr = interpret_expr env arr_expr in
+            let idx = interpret_expr env idx_expr in
+            begin match arr, idx with
+                | VArray content, VInteger x -> content.(x) <- v
+                | _ -> raise (Runtime_error "Not valid indexing")
+            end;
+            v
+        | Variable x -> update env x v; v
+        | _ -> raise (Runtime_error "Invalid assignment target")
+
 and interpret_expr env (expr: Ast.expr)  = match expr.kind with
     | IntLit x -> VInteger x
     | FloatLit x -> VFloat x
@@ -181,17 +195,8 @@ and interpret_expr env (expr: Ast.expr)  = match expr.kind with
         let val2 = interpret_expr env expr2 in
         interpret_logical val1 logical_op val2
 
-
-    | Assign (var_name, expr) ->
-        let v = interpret_expr env expr in
-        begin match lookup env var_name with
-            | Some Some x when types_match v x -> ()
-            (* TODO: here is where type should be checked but i don't have it rn *)
-            | Some None -> ()
-            | _ -> raise (Runtime_error "Variable doesn't exist, cannot assign")
-        end;
-        update env var_name v;
-        v
+    | Assign (expr1, expr2) ->
+        interpret_assignment env expr1 expr2
 
     | FunExpr (parameter_list, data_type, body) ->
         let fun_val: function_value = {

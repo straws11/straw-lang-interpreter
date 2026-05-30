@@ -43,7 +43,7 @@ type expr_kind =
     | Unary of unary_op * expr
     | Logical of expr * logical_op * expr
 
-    | Assign of string * expr
+    | Assign of expr * expr
     | FunExpr of parameter list * data_type option * block
 
     | Group of expr
@@ -192,10 +192,11 @@ let rec string_of_expr depth expr =
             line depth ")"
         ]
 
-    | Assign (s, e) ->
+    | Assign (e1, e2) ->
         block depth [
-            line depth ("Assign(" ^ s);
-            string_of_expr (depth + 1) e;
+            line depth "Assign(";
+            string_of_expr (depth + 1) e1;
+            string_of_expr (depth + 1) e2;
             line depth ")"
         ]
 

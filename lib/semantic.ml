@@ -216,6 +216,37 @@ and type_check_array_content st (contents: Ast.expr array) =
         | Some dt -> loop 0 dt (Array.to_list dts); Ast.TArray dt
         | None -> failwith "array empty, how should I get the type??"
 
+and type_check_assignment st (exp: Ast.expr) = match exp.kind with
+    | Ast.Assign (lhs, rhs) ->
+        let rhs_t = type_check_expr st rhs in
+        begin match lhs.kind with
+        | Ast.Index (arr_expr, idx_expr) ->
+            let arr_t = type_check_expr st arr_expr in
+            let idx_t = type_check_expr st idx_expr in
+            begin match arr_t, idx_t with
+                | TArray dt, TInteger ->
+                    if not (types_match_exact dt rhs_t) then
+                        raise (Type_mismatch_error (str_of_dt rhs_t, str_of_dt dt, rhs.pos))
+                    else
+                        rhs_t
+                | TArray _, _ -> raise (Type_custom_error ("Index type must be of type int", idx_expr.pos))
+                | t, _ -> raise (Type_custom_error ("Cannot index into object of type " ^ str_of_dt t, arr_expr.pos))
+            end
+        | Ast.Variable x ->
+            begin match lookup_st st x with
+                | Some VariableSymbol dt ->
+                    if types_match dt rhs_t then
+                        rhs_t
+                    else
+                        raise (Type_mismatch_error (str_of_dt rhs_t, str_of_dt dt, rhs.pos))
+                | Some FunctionSymbol (_, _) -> raise (Type_custom_error ("Cannot reassign function", rhs.pos))
+                | _ -> raise (Type_undeclared_error (x, lhs.pos))
+            end
+        | _ -> raise (Type_custom_error ("Invalid assignment target", lhs.pos))
+        end
+
+    | _ -> failwith "Impossible"
+
 and type_check_expr st (exp: Ast.expr) = match exp.kind with
     | IntLit x -> Ast.TInteger
     | FloatLit x -> Ast.TFloat
@@ -249,17 +280,7 @@ and type_check_expr st (exp: Ast.expr) = match exp.kind with
     | Binary (_, _, _) -> type_check_binary st exp
     | Unary (_, _) -> type_check_unary st exp
     | Logical (_, _, _) -> type_check_logical st exp
-    | Assign (var, exp) ->
-            let var_type = match get_var_type st var with
-                | Some x -> x
-                | None -> raise (Type_undeclared_error (var, exp.pos))
-            in
-            let exp_type = type_check_expr st exp in
-            if types_match_exact var_type exp_type then
-                var_type
-            else
-                raise (Type_mismatch_error (str_of_dt exp_type, str_of_dt var_type, exp.pos))
-
+    | Assign (_, _) -> type_check_assignment st exp
     | FunExpr (params, dt_option, body) -> type_check_function_block st params dt_option body; Ast.TFunction
     | Group exp -> type_check_expr st exp
 
