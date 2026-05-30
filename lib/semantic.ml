@@ -180,22 +180,22 @@ and type_check_call st (exp: Ast.expr) =
 
     match exp.kind with
     | Call (expr, param_exprs) ->
-            begin match expr with
-            (* TODO: FunExpr should also be able to match `fn (str smth){}("hi")` *)
-            | { kind = Variable x; _ } ->
-                begin match lookup_st st x with
-                    | Some FunctionSymbol (param_dts, ret_dt_op) -> (
-                        loop st param_exprs param_dts;
-                        begin match ret_dt_op with
-                            | Some x -> x
-                            | None -> TUnit
-                        end
-                        )
-                    | Some VariableSymbol dt -> raise (Type_custom_error ("Variable of type " ^ str_of_dt dt ^ " not callable", exp.pos))
-                    | _ -> raise (Type_custom_error ("Undefined variable not callable", exp.pos))
-                end
-            | x -> raise (Type_mismatch_error ("expression", "function", exp.pos))
+        begin match expr with
+        (* TODO: FunExpr should also be able to match `fn (str smth){}("hi")` *)
+        | { kind = Variable x; _ } ->
+            begin match lookup_st st x with
+                | Some FunctionSymbol (param_dts, ret_dt_op) -> (
+                    loop st param_exprs param_dts;
+                    begin match ret_dt_op with
+                        | Some x -> x
+                        | None -> TUnit
+                    end
+                    )
+                | Some VariableSymbol dt -> raise (Type_custom_error ("Variable of type " ^ str_of_dt dt ^ " not callable", exp.pos))
+                | _ -> raise (Type_custom_error ("Undefined variable not callable", exp.pos))
             end
+        | x -> raise (Type_mismatch_error ("expression", "function", exp.pos))
+        end
 
     | _ -> failwith "Impossible"
 
@@ -276,6 +276,11 @@ and type_check_expr st (exp: Ast.expr) = match exp.kind with
             (* TODO: unimplemented - structs don't exist *)
             let t = type_check_expr st exp in
             t
+    | ArrayLength e ->
+        begin match type_check_expr st e with
+            | TArray _ -> TInteger
+                | _ -> raise (Type_custom_error ("Length can only be invoked on type array", exp.pos))
+        end
 
     | Binary (_, _, _) -> type_check_binary st exp
     | Unary (_, _) -> type_check_unary st exp
@@ -383,12 +388,16 @@ and collect_declarations ast =
     in
     let global_scope: scope = { outer = None; tbl =Hashtbl.create 11 } in
     loop global_scope ast;
-    print_st global_scope "Collected declarations for type-checking:";
     global_scope
 
 
+and inject_stdlib_symbols st =
+    List.iter (fun (name, sym) -> insert_st st name sym) Stdlib.builtin_symbols
+
 and run_type_checking (ast: Ast.block) =
     let st = collect_declarations ast in
+    inject_stdlib_symbols st;
+    print_st st "Collected declarations for type-checking:";
     type_check st ast;
     print_st st "after type checking st"
 

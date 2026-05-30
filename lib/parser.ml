@@ -28,8 +28,7 @@ open Ast
     return = "return" [ expr ]
     data_type = ( int | float | bool | str | func ) ( [ "[" "]" ] ) *
     declaration = data_type IDENTIFIER [ "=" expr ]
-    print = "print" "(" expr ")"
-    statement = ( if | for | while | return | declaration | function_decl | expr_stmt | print )
+    statement = ( if | for | while | return | declaration | function_decl | expr_stmt )
     body = ( statement )*
 *)
 
@@ -263,7 +262,7 @@ and parse_expr_list parser =
 (*
     postfix = primary ( "(" expr_list ")" | "[" expr "]" | "." IDENTIFIER )*
 *)
-and parse_postfix parser =
+and parse_postfix parser: Ast.expr =
     let primary = parse_primary parser in
     parse_postfix_tail parser primary
 
@@ -284,7 +283,10 @@ and parse_postfix_tail parser inner =
         | Some Dot ->
                 let position = get_token_pos parser in
                 let id = ignore (advance parser); expect_id parser in
-                parse_postfix_tail parser ({ kind = StructAccess (inner, id); pos = position })
+                if (id = "length") then
+                    {kind = ArrayLength inner; pos = position}
+                else
+                    parse_postfix_tail parser ({ kind = StructAccess (inner, id); pos = position })
         | _ -> inner
 
 (*
@@ -582,21 +584,8 @@ and parse_declaration parser =
 
     { kind = VarDeclStmt (data_type, id, init); pos = position }
 
-(* TODO: remove, this will be part of std lib
-    print = "print" "(" expr ")"
-*)
-
-and parse_print parser =
-    let position = get_token_pos parser in
-    expect parser Print "Shouldn't happen";
-    expect parser LParen "Expected '('";
-    let e = parse_expr parser in
-    expect parser RParen "Unclosed print, expected ')'";
-    { kind = PrintStmt e; pos = position }
-
-
 (*
-    statement = ( if | for | while | return | declaration | function_decl | expr_stmt | print )
+    statement = ( if | for | while | return | declaration | function_decl | expr_stmt )
  *)
 and parse_statement parser = match peek parser with
     | Some If -> parse_if parser
@@ -604,7 +593,6 @@ and parse_statement parser = match peek parser with
     | Some While -> parse_while parser
     | Some Return -> parse_return parser
     | Some Fn -> parse_function_decl parser
-    | Some Print -> parse_print parser
     | Some x when starts_declaration x -> parse_declaration parser
     | Some x when starts_expr parser -> {
             kind = ExprStmt (parse_expr parser); pos = get_token_pos parser

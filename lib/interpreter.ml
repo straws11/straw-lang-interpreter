@@ -30,45 +30,12 @@ let types_match t1 t2 = match t1, t2 with
     | VFunction _, VFunction _ -> true
     | _ -> false
 
-(* return None if variable doesn't exist, and Some if it does. the Some
-   contains a Some x if there's an associated value, and None if
-   there isn't yet
-   *)
-let lookup env var =
-    let rec loop scope =
-        let item = Hashtbl.find_opt scope.tbl var in
-        match item with
-            | Some Some x -> Some (Some x) (* found & has value *)
-            | Some None -> Some None (* found but no assigned value *)
-            | _ ->
-                begin match scope.outer with
-                    | Some e -> loop e
-                    | None -> None
-                end
-    in
-    loop env
-
-let insert env name v = Hashtbl.replace env.tbl name (Some v)
-
-let insert_empty env name = Hashtbl.replace env.tbl name None
-
-let update env name new_v =
-    let rec loop scope =
-        match Hashtbl.find_opt scope.tbl name with
-            | Some _ -> Hashtbl.replace scope.tbl name (Some new_v)
-            | None ->
-                begin match scope.outer with
-                | Some e -> loop e
-                | None -> ()
-                end
-    in loop env
-
 
 (* error *)
 exception Runtime_error of string
 
     let () = Printexc.register_printer (function
-        | Runtime_error (s) -> Some (Printf.sprintf "TypeError: %s" s)
+        | Runtime_error (s) -> Some (Printf.sprintf "RuntimeError: %s" s)
         | _ -> None
     )
 
@@ -76,12 +43,6 @@ exception Return_exception of value (* used for returning *)
 (* core *)
 
 let rec apply_function env (func: function_value) (args: value list) =
-    (*let param_types = List.map (fun element -> fst element) func.params in
-    List.iter2 (fun actual_val expected_type -> (
-        if not (value_has_right_type actual_val expected_type) then
-            raise (Runtime_error "Argument type doesn't match parameter type")
-    )) args param_types;*)
-
     let rec insert_params env params rem = match params, rem with
         | ph :: pt, h :: t -> insert env (snd ph) h; insert_params env pt t
         | [], [] -> ()
@@ -93,13 +54,20 @@ let rec apply_function env (func: function_value) (args: value list) =
         | [] -> ()
     in
     let func_scope: environment = { outer = Some env; tbl = Hashtbl.create 11 } in
-    insert_params func_scope func.params args;
+    begin match func with
+        | UserFunction (params, _ret, _body) -> insert_params func_scope params args;
+        | BuiltinFunction _f -> ();
+    end;
     print_env func_scope;
-    try
-        loop func_scope func.body;
-        VUnit
-    with
-        | Return_exception v -> v
+    match func with
+        | UserFunction (_params, _ret, body) ->
+            begin try
+                loop func_scope body;
+                VUnit
+            with
+                | Return_exception v -> v
+            end
+        | BuiltinFunction f -> f args
 
 and interpret_while env expr body =
     let rec run_loop () =
@@ -137,7 +105,10 @@ and interpret_index env var idx =
         | _ -> raise (Runtime_error "Shouldn't happen")
     in
 
-    arr.(idx_num)
+    if idx_num < 0 || idx_num > (Array.length arr) then
+        raise (Runtime_error ("Index " ^ string_of_int idx_num ^ " out of bounds of array with size " ^ string_of_int (Array.length arr)))
+    else
+        arr.(idx_num)
 
 and interpret_assignment env (lhs_expr: Ast.expr) (rhs_expr: Ast.expr) =
     let v = interpret_expr env rhs_expr in
@@ -180,6 +151,13 @@ and interpret_expr env (expr: Ast.expr)  = match expr.kind with
             interpret_index env var idx
 
     | StructAccess (exp, id) -> raise (Runtime_error "Unimplemented")
+    | ArrayLength e ->
+        let arr = interpret_expr env e in
+        begin match arr with
+            | VArray content -> VInteger (Array.length content)
+            | _ -> failwith "Shouldn't happen"
+        end
+
 
     | Binary (expr1, binary_op, expr2) ->
         let val1 = interpret_expr env expr1 in
@@ -199,11 +177,7 @@ and interpret_expr env (expr: Ast.expr)  = match expr.kind with
         interpret_assignment env expr1 expr2
 
     | FunExpr (parameter_list, data_type, body) ->
-        let fun_val: function_value = {
-            body = body;
-            params = parameter_list;
-            return_type = data_type
-        } in
+        let fun_val = UserFunction (parameter_list, data_type, body) in
         VFunction fun_val
 
     | Group expr -> interpret_expr env expr
@@ -338,11 +312,7 @@ and interpret_statement env (stmt: Ast.statement) = match stmt.kind with
             end
 
     | FunDeclStmt (name, parameter_list, data_type, body) ->
-        let fun_val: function_value = {
-            body = body;
-            params = parameter_list;
-            return_type = data_type
-        } in
+        let fun_val = UserFunction (parameter_list, data_type, body) in
         insert env name (VFunction fun_val);
 
         (* TODO: don't think this one is right *)
@@ -385,14 +355,14 @@ and interpret_block env (ast: block): unit =
 
 and collect_statement env (stmt: Ast.statement) = match stmt.kind with
     | Ast.VarDeclStmt (_, name, Some { kind = FunExpr (params, return_op, body); _ }) ->
-        let func_val = { params = params; body = body; return_type = return_op } in
+        let func_val = UserFunction (params, return_op, body) in
         insert env name (VFunction func_val)
 
     | Ast.VarDeclStmt (dt, name, _expr_op) ->
         insert_empty env name (* insert that the var exists but ignore its type, we will deal later*)
 
     | Ast.FunDeclStmt (name, params, return_op, body) ->
-            let func_val = { params = params; body = body; return_type = return_op } in
+            let func_val = UserFunction (params, return_op, body) in
             insert env name (VFunction func_val)
 
     | _ -> ()
@@ -408,11 +378,15 @@ and collect_declarations ast =
     print_env global_scope;
     global_scope
 
+and inject_stdlib st =
+    List.iter (fun (name, vf) -> insert st name vf) Stdlib.builtin_functions;
+
 and interpret ast =
     let rec loop env rem = match rem with
         | h :: t -> interpret_statement env h; loop env t
         | [] -> ()
     in
     let scope = collect_declarations ast in
+    inject_stdlib scope;
     loop scope ast
 

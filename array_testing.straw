@@ -1,26 +1,26 @@
-/*int[] a = [91, 123, 123, 342, 12, 421]
+int[] a = [91, 123, 123, 342, 12, 421]
 int i = 0
 while i < 6 {
-    print(a[i])
+    print(int_to_str(a[i]))
     i = i + 1
 }
 
 fn reverse(int[] nums) -> int[] {
     int[] new_nums = [-1, -1, -1, -1, -1, -1]
-    for (int i = 0; i < 6; i = i + 1) {
+    for (int i = 0; i < new_nums.length; i = i + 1) {
         new_nums[i] = nums[6 - i - 1]
     }
     return new_nums
 }
 
 int[] b = reverse(a)
-print(b)*/
 
-int[][] matrix = [[1,2,3],[4,5,6]]
+/*int[][] matrix = [[1,2,3],[4,5,6]]
 
-for (int i = 0; i < 2; i = i + 1) {
-	for (int j = 0; j < 3; j = j + 1) {
+for (int i = 0; i < matrix.length; i = i + 1) {
+	for (int j = 0; j < matrix[i].length; j = j + 1) {
+		matrix[i][j] = matrix[i][j] + 2
 		print(matrix[i][j])
 	}
-}
+}*/
 

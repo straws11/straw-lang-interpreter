@@ -51,8 +51,6 @@ type token_kind =
     | Bool
     | Func
     | While
-    (* TODO: temp, remove *)
-    | Print
 
     | EOF
 
@@ -103,7 +101,6 @@ let string_of_token token_type = match token_type with
     | Bool -> "Bool"
     | Func -> "Func"
     | While -> "While"
-    | Print -> "Print"
     | EOF -> "EOF"
 
 let string_of_token_list token_list =
@@ -124,5 +121,4 @@ let reserved_words = StringMap.of_seq @@ List.to_seq [
     ("bool", Bool);
     ("func", Func);
     ("while", While);
-    ("print", Print);
 ]

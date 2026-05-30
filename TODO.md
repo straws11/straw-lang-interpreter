@@ -1,5 +1,6 @@
 # To-Do Features
 
+- [x] Arrays (2d included)
 - [ ] Formatted strings natively
 - [ ] Stdlib for print, read input
 - [ ] Structs

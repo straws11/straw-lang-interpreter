@@ -38,6 +38,7 @@ type expr_kind =
     | Call of expr * expr list
     | Index of expr * expr
     | StructAccess of expr * string
+    | ArrayLength of expr
 
     | Binary of expr * binary_op * expr
     | Unary of unary_op * expr
@@ -167,6 +168,13 @@ let rec string_of_expr depth expr =
             string_of_expr (depth + 1) e;
             line depth id;
             line depth ")"
+        ]
+
+    | ArrayLength e ->
+        block depth [
+            line depth "ArrayLength(";
+            string_of_expr (depth + 1) e;
+            line depth ")";
         ]
 
     | Unary (op, e) ->
