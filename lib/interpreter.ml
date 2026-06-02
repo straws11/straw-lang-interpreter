@@ -1,5 +1,6 @@
 open Ast
 open Interpret_types
+open Exceptions
 
 (* help *)
 
@@ -30,14 +31,6 @@ let types_match t1 t2 = match t1, t2 with
     | VFunction _, VFunction _ -> true
     | _ -> false
 
-
-(* error *)
-exception Runtime_error of string
-
-    let () = Printexc.register_printer (function
-        | Runtime_error (s) -> Some (Printf.sprintf "RuntimeError: %s" s)
-        | _ -> None
-    )
 
 exception Return_exception of value (* used for returning *)
 (* core *)
@@ -124,11 +117,38 @@ and interpret_assignment env (lhs_expr: Ast.expr) (rhs_expr: Ast.expr) =
         | Variable x -> update env x v; v
         | _ -> raise (Runtime_error "Invalid assignment target")
 
+and interpret_f_string env (expr: Ast.expr) =
+    let rec loop rem_s rem_v = match rem_v with
+        | h :: t -> (
+                let var = interpret_expr env h in
+                begin match var with
+                    | VString s ->
+                        begin match rem_s with
+                        | sh :: st -> sh ^ s ^ (loop st t)
+                        | [] -> s
+                        end
+                    | _ -> raise (Runtime_error ("Variable must be of type 'str'"))
+                end)
+        | [] ->
+            begin match rem_s with
+            | h :: t -> h ^ (loop t [])
+            | [] -> ""
+            end
+    in
+    match expr.kind with
+    | FormattedStringLit (segs, vars) ->
+            VString (loop segs vars)
+
+    | _ -> failwith "Impossible"
+
+
+
 and interpret_expr env (expr: Ast.expr)  = match expr.kind with
     | IntLit x -> VInteger x
     | FloatLit x -> VFloat x
     | BoolLit x -> VBoolean x
     | StrLit x -> VString x
+    | FormattedStringLit (_, _) -> interpret_f_string env expr
     | ArrayContent x -> VArray (Array.map (interpret_expr env) x)
 
     | Variable x -> begin match lookup env x with

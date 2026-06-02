@@ -33,6 +33,7 @@ type token_kind =
     (* literals *)
     | Identifier of string
     | String of string
+    | FormattedString of string list * token list
     | FloatPoint of float
     | Integer of int
     | Boolean of bool
@@ -55,12 +56,12 @@ type token_kind =
     | EOF
 
 
-type token = {
+and token = {
     kind: token_kind;
     pos: position;
 }
 
-let string_of_token token_type = match token_type with
+let rec string_of_token token_type = match token_type with
     | LParen -> "LParen"
     | RParen -> "RParen"
     | LBrace -> "LBrace"
@@ -85,6 +86,12 @@ let string_of_token token_type = match token_type with
     | Arrow -> "Arrow"
     | Identifier x -> "Identifier(" ^ x ^ ")"
     | String x -> "String(" ^ x ^ ")"
+    | FormattedString (segs, vars) ->
+            "FString("
+            ^ (String.concat ", " segs)
+            ^ " with "
+            ^ (String.concat ", " (List.map (fun t -> string_of_token t.kind) vars))
+            ^ ")"
     | Integer x -> "Integer(" ^ string_of_int x ^ ")"
     | FloatPoint x -> "FloatPoint(" ^ string_of_float x ^ ")"
     | Boolean x -> "Boolean(" ^ string_of_bool x ^ ")"

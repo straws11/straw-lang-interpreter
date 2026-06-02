@@ -61,7 +61,7 @@ let rec string_of_param_list params =
 
 let string_of_function f = match f with
         | UserFunction (params, return, _body) -> "function:" ^ string_of_param_list params ^ (match return with Some x -> Ast.string_of_data_type x | None -> "")
-        | BuiltinFunction (_what) -> "stdlib function idk man"
+        | BuiltinFunction (_what) -> "stdlib function"
 
 let rec string_of_value v = match v with
         | VInteger f -> string_of_int f

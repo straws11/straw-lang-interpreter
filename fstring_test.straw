@@ -1,0 +1,5 @@
+str a = "hi"
+str b = "bb"
+str c = "ccc"
+print(`ok {a} there`)
+print(`{a}, {b}, {c}`)

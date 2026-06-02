@@ -1,5 +1,5 @@
-int x = 10
-fn test() {
-	print(x)
-}
-test()
+print("hi!")
+str name = input("Enter your name: ")
+print("hello\t\"hey\"\n" + name)
+
+

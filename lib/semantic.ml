@@ -1,4 +1,5 @@
 open Semantic_types
+open Exceptions
 
 (* helpers *)
 let rec types_match_exact t1 t2 = match t1, t2 with
@@ -35,35 +36,6 @@ let create_new_scope outer_scope = { outer = outer_scope; tbl = Hashtbl.create 1
 let safe_array_get arr i =
     if i >= 0 && i < Array.length arr then Some arr.(i) else None
 
-(* error *)
-exception Type_mismatch_error of string * string * Lexing_types.position
-
-exception Type_invalid_operator_error of string * string * string * Lexing_types.position
-
-exception Type_invalid_un_operator_error of string * string * Lexing_types.position
-
-exception Type_undeclared_error of string * Lexing_types.position
-
-exception Type_custom_error of string * Lexing_types.position
-
-    let () = Printexc.register_printer (function
-        | Type_mismatch_error (found, expected, pos) ->
-                Some (Printf.sprintf "TypeError: found %s but expected %s at %d:%d" found expected pos.line pos.column)
-
-        | Type_invalid_un_operator_error (dt, op, pos) ->
-                Some (Printf.sprintf "TypeError: operator '%s' not applicable for type %s at %d:%d" op dt pos.line pos.column)
-
-        | Type_invalid_operator_error (op, dt, dt2, pos) ->
-                Some (Printf.sprintf "TypeError: operator '%s' not applicable for types %s and %s at %d:%d" op dt dt2 pos.line pos.column)
-
-        | Type_undeclared_error (name, pos) ->
-                Some (Printf.sprintf "TypeError: variable %s not declared at %d:%d" name pos.line pos.column)
-
-        | Type_custom_error (text, pos) ->
-                Some (Printf.sprintf "TypeError: %s at %d:%d" text pos.line pos.column)
-
-        | _ -> None
-    )
 
 let rec type_check_return st cur_return_type (ret: Ast.statement) =
     match ret.kind with
@@ -252,6 +224,12 @@ and type_check_expr st (exp: Ast.expr) = match exp.kind with
     | FloatLit x -> Ast.TFloat
     | BoolLit x -> Ast.TBoolean
     | StrLit x -> Ast.TString
+    | FormattedStringLit (segments, vars) -> List.iter (fun x -> match type_check_expr st x with
+            | TString -> ()
+            | y -> raise (Type_mismatch_error (str_of_dt y, str_of_dt TString, x.pos))
+        ) vars;
+        TString
+
     | ArrayContent x -> type_check_array_content st x
 
     | Variable x ->

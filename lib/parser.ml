@@ -1,5 +1,6 @@
 open Lexing_types
 open Ast
+open Exceptions
 (*
 ----EBNF----
 
@@ -7,7 +8,7 @@ open Ast
     function_expr = "fn" "(" function_params ")" [ "->" data_type ] block
     function_decl = "fn" IDENTIFIER "(" function_params ")" [ "->" data_type ] block
     array_content = "[" [ expr ( "," expr )* ]"]"
-    primary = INTEGER | FLOAT | STRING | BOOLEAN | IDENTIFIER | array_content | function_expr | "(" expr ")"
+    primary = INTEGER | FLOAT | STRING | FORMATTED_STRING | BOOLEAN | IDENTIFIER | array_content | function_expr | "(" expr ")"
     expr_list = expr ( "," expr )*
     postfix = primary ( "(" expr_list ")" | "[" expr "]" | "." IDENTIFIER )*
     unary = ( "!" | "-" ) unary | postfix
@@ -39,13 +40,6 @@ type t = {
 }
 
 let create tokens = { tokens; pos = 0 }
-
-exception Parse_error of string * Lexing_types.position
-
-    let () = Printexc.register_printer (function
-        | Parse_error (s, pos) -> Some (Printf.sprintf "ParseError: %s at %d:%d" s pos.line pos.column)
-        | _ -> None
-    )
 
 (* helper *)
 let get_comparison_op tok = match tok with
@@ -125,7 +119,7 @@ let expect_id parser = match advance parser with
 
 (* TODO: should this be called starts_call?? *)
 let starts_primary tok = match tok with
-    | Identifier _ | String _ | Boolean _ | Integer _ | FloatPoint _ | Fn | LBrack | LParen -> true
+    | Identifier _ | String _ | FormattedString (_, _) | Boolean _ | Integer _ | FloatPoint _ | Fn | LBrack | LParen -> true
     | _ -> false
 
 let starts_declaration tok = match tok with
@@ -215,8 +209,18 @@ and parse_array_content parser =
     else
         raise (Parse_error ("Expected array initializer", get_token_pos parser))
 
+and parse_formatted_string parser segments variables =
+    let rec loop (rem: token list): Ast.expr list = match rem with
+        | h :: t -> begin match h.kind with
+            | Identifier x -> ({ kind = Variable x; pos = h.pos } :: loop t)
+            | _ -> raise (Parse_error ("Only variables accepted in formatted string", get_token_pos parser))
+            end
+        | [] -> []
+    in
+    FormattedStringLit (segments, loop variables)
+
 (*
-    primary = INTEGER | FLOAT | STRING | BOOLEAN | IDENTIFIER | array_content | function_expr | "(" expr ")"
+    primary = INTEGER | FLOAT | STRING | FORMATTED_STRING | BOOLEAN | IDENTIFIER | array_content | function_expr | "(" expr ")"
 *)
 and parse_primary parser =
     match peek parser with
@@ -226,6 +230,7 @@ and parse_primary parser =
             ignore (advance parser);
             { kind = begin match tok with
             | String x -> StrLit x
+            | FormattedString (segs, vars) -> parse_formatted_string parser segs vars
             | Integer x -> IntLit x
             | FloatPoint x -> FloatLit x
             | Boolean x -> BoolLit x

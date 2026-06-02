@@ -32,6 +32,7 @@ type expr_kind =
     | IntLit of int
     | BoolLit of bool
     | StrLit of string
+    | FormattedStringLit of string list * expr list
     | ArrayContent of expr array
 
     | Variable of string
@@ -130,6 +131,12 @@ let rec string_of_expr depth expr =
     | FloatLit x -> line depth ("FloatLit(" ^ string_of_float x ^ ")")
     | BoolLit x -> line depth ("BoolLit(" ^ string_of_bool x ^ ")")
     | StrLit x -> line depth ("StrLit(" ^ x ^ ")")
+    | FormattedStringLit (segments, vars) ->
+            block depth [
+                line depth "FStringLit(";
+                line depth (String.concat ", " segments);
+                line depth (String.concat ", " (List.map (string_of_expr (depth + 1)) vars));
+            ]
     | ArrayContent contents ->
         block depth [
                 line depth "ArrayContent(";
