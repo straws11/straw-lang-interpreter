@@ -8,7 +8,8 @@ open Exceptions
     function_expr = "fn" "(" function_params ")" [ "->" data_type ] block
     function_decl = "fn" IDENTIFIER "(" function_params ")" [ "->" data_type ] block
     array_content = "[" [ expr ( "," expr )* ]"]"
-    primary = INTEGER | FLOAT | STRING | FORMATTED_STRING | BOOLEAN | IDENTIFIER | array_content | function_expr | "(" expr ")"
+    struct_expr = "{" [ IDENTIFIER "=" expr ( "," IDENTIFIER "=" expr )* ] "}"
+    primary = INTEGER | FLOAT | STRING | FORMATTED_STRING | BOOLEAN | IDENTIFIER | array_content | function_expr | struct_expr | "(" expr ")"
     expr_list = expr ( "," expr )*
     postfix = primary ( "(" expr_list ")" | "[" expr "]" | "." IDENTIFIER )*
     unary = ( "!" | "-" ) unary | postfix
@@ -220,7 +221,36 @@ and parse_formatted_string parser segments variables =
     FormattedStringLit (segments, loop variables)
 
 (*
-    primary = INTEGER | FLOAT | STRING | FORMATTED_STRING | BOOLEAN | IDENTIFIER | array_content | function_expr | "(" expr ")"
+    struct_expr = "{" [ IDENTIFIER "=" expr ( "," IDENTIFIER "=" expr )* ] "}"
+*)
+and parse_struct_expr parser =
+    let rec loop entries = match peek parser with
+        | Some Comma ->
+                ignore (advance parser);
+                let id = expect_id parser in
+                expect parser Equal "Expected '='";
+                let expr = parse_expr parser in
+                loop ((id, expr) :: entries)
+        | Some _ | None -> (List.rev keys, List.rev vals)
+    in
+
+    match peek parser with
+        | Some Identifier x ->
+                let id = expect_id parser in
+                expect parser Equal "Expected '='";
+                let expr = parse_expr parser in
+                let entries = loop [(id, expr)] in
+                let ht = Hashtbl.create 3 in
+                Hashtbl.add_seq ht entries
+                StructExpr (Hashtbl.create 3)
+
+        | Some RBrace ->
+        | Some _ -> raise (Parse_error ("Unexpected token for struct body, expected identifier", get_token_pos parser))
+        | None -> raise (Parse_error ("Unexpected end of input", get_token_pos parser))
+
+
+(*
+    primary = INTEGER | FLOAT | STRING | FORMATTED_STRING | BOOLEAN | IDENTIFIER | array_content | function_expr | struct_expr | "(" expr ")"
 *)
 and parse_primary parser =
     match peek parser with
@@ -236,6 +266,7 @@ and parse_primary parser =
             | Boolean x -> BoolLit x
             | Identifier x -> Variable x
             | LBrack -> parse_array_content parser
+            | LBrace -> parse_struct_expr parser
             | LParen ->
                 let expr = parse_expr parser in
                 expect parser RParen "Expected ')' after expression";

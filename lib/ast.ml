@@ -1,11 +1,10 @@
-type data_type =
-    | TInteger
-    | TFloat
-    | TBoolean
-    | TString
-    | TArray of data_type
-    | TFunction
-    | TUnit
+type unary_op =
+    | Not
+    | Negate
+
+type logical_op =
+    | AndOp
+    | OrOp
 
 type binary_op =
     | Add
@@ -19,21 +18,24 @@ type binary_op =
     | GreaterOp
     | GreaterEqualOp
 
-type unary_op =
-    | Not
-    | Negate
+type data_type =
+    | TInteger
+    | TFloat
+    | TBoolean
+    | TString
+    | TArray of data_type
+    | TFunction
+    | TStruct (*of (string, expr) Hashtbl.t*)
+    | TUnit
 
-type logical_op =
-    | AndOp
-    | OrOp
-
-type expr_kind =
+and expr_kind =
     | FloatLit of float
     | IntLit of int
     | BoolLit of bool
     | StrLit of string
     | FormattedStringLit of string list * expr list
     | ArrayContent of expr array
+    | StructExpr of (string, expr) Hashtbl.t
 
     | Variable of string
     | Call of expr * expr list
@@ -92,6 +94,7 @@ let rec string_of_data_type dt = match dt with
     | TBoolean -> "TBoolean"
     | TString -> "TString"
     | TArray d -> "TArray of " ^ string_of_data_type d
+    | TStruct -> "TStruct"
     | TFunction -> "TFunction"
     | TUnit -> "TUnit"
 
