@@ -5,11 +5,11 @@
 (generate_opam_files true)
 
 (source
- (github username/reponame))
+ (github straws11/straw-lang-interpreter))
 
-(authors "Author Name <author@example.com>")
+(authors "Dylan Swarts <dswarts11@gmail.com>")
 
-(maintainers "Maintainer Name <maintainer@example.com>")
+(maintainers "Dylan Swarts <dswarts11@gmail.com>")
 
 (license LICENSE)
 
@@ -17,7 +17,7 @@
 
 (package
  (name straw-lang-interpreter)
- (synopsis "A short synopsis")
+ (synopsis "Interpreter for StrawLang")
  (description "A longer description")
  (depends ocaml)
  (tags
