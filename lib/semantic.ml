@@ -265,6 +265,22 @@ and type_check_assignment st (exp: Ast.expr) = match exp.kind with
 
     | _ -> failwith "Impossible"
 
+and type_check_struct_access st exp =
+    match exp.kind with
+    | StructAccess (expr, id) ->
+        let t = type_check_expr st expr in
+        if t != TStruct then
+            raise (Type_mismatch_error (str_of_dt t, str_of_dt TStruct, exp.pos))
+        begin match lookup_st st id with
+            | Some StructSymbol ht ->
+                    begin match Hashtbl.find_opt ht id with
+                        | Some 
+                    end
+            | _ -> failwith "what should this be"
+        end
+
+    | _ -> failwith "Impossible"
+
 and type_check_expr st (exp: Ast.expr) = match exp.kind with
     | IntLit x -> Ast.TInteger
     | FloatLit x -> Ast.TFloat
@@ -296,10 +312,8 @@ and type_check_expr st (exp: Ast.expr) = match exp.kind with
                 | x, _ -> raise (Type_custom_error ("Cannot index into value of type " ^ str_of_dt x, exp1.pos))
             end
 
-    | StructAccess (exp, id) ->
-            (* TODO: unimplemented - structs don't exist *)
-            let t = type_check_expr st exp in
-            t
+    | StructAccess (expr, id) -> type_check_struct_access st exp
+
     | ArrayLength e ->
         begin match type_check_expr st e with
             | TArray _ -> TInteger
