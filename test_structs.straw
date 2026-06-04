@@ -1,13 +1,17 @@
-Animal cat = Animal {
-    kind = 3,
-    sound = "hiiii"
-}
-
 struct Animal {
-    int kind,
-    str sound
+    str name,
+    float age
 }
 
+Animal[] farm_animals = [
+    Animal { name = "pig", age = 3.1 },
+    Animal { age = 1, name = "birb" },
+    Animal { age = 291.999, name = "me" }
+]
 
-print(int_to_str(cat.kind))
-print(cat.sound)
+for (int i = 0; i < farm_animals.length; i = i + 1) {
+    Animal a = farm_animals[i]
+    print("Animal " + int_to_str(i) + ":")
+    print(a.name)
+    print(float_to_str(a.age))
+}

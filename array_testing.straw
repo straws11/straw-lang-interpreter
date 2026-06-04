@@ -15,12 +15,12 @@ fn reverse(int[] nums) -> int[] {
 
 int[] b = reverse(a)
 
-/*int[][] matrix = [[1,2,3],[4,5,6]]
+int[][] matrix = [[1,2,3],[4,5,6]]
 
 for (int i = 0; i < matrix.length; i = i + 1) {
 	for (int j = 0; j < matrix[i].length; j = j + 1) {
 		matrix[i][j] = matrix[i][j] + 2
-		print(matrix[i][j])
+		print(int_to_str(matrix[i][j]))
 	}
-}*/
+}
 

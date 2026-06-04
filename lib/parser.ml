@@ -130,10 +130,10 @@ let starts_primary tok = match tok with
 
 let starts_var_declaration parser = match peek parser with
     | Some Int | Some Float | Some Str | Some Bool | Some Func -> true
-    (* struct var decl starts with 2 identifiers, the type then name *)
+    (* struct var decl starts with 2 identifiers, the type then name OR identifier then '[' for array *)
     | Some Identifier _ ->
         begin match peek_next parser with
-            | Some Identifier _ -> true
+            | Some Identifier _ | Some LBrack -> true
             | _ -> false
         end
     | _ -> false

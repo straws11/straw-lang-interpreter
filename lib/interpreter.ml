@@ -61,7 +61,6 @@ let rec apply_function env (func: function_value) (args: value list) =
         | UserFunction (params, _ret, _body) -> insert_params func_scope params args;
         | BuiltinFunction _f -> ();
     end;
-    print_env func_scope;
     match func with
         | UserFunction (_params, _ret, body) ->
             begin try

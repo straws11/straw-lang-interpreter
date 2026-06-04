@@ -37,11 +37,13 @@ let input_fn params =
 let builtin_functions = [
     ("print", VFunction (BuiltinFunction print_fn));
     ("int_to_str", VFunction (BuiltinFunction str_fn));
+    ("float_to_str", VFunction (BuiltinFunction str_fn));
     ("input", VFunction (BuiltinFunction input_fn));
 ]
 
 let builtin_symbols = [
     ("print", Semantic_types.FunctionSymbol ([TString], Some TUnit));
     ("int_to_str", Semantic_types.FunctionSymbol ([TInteger], Some TString));
+    ("float_to_str", Semantic_types.FunctionSymbol ([TFloat], Some TString));
     ("input", Semantic_types.FunctionSymbol ([TString], Some TString))
 ]
