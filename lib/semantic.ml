@@ -8,9 +8,9 @@ let rec types_match_exact t1 t2 = match t1, t2 with
     | Ast.TFloat, Ast.TFloat -> true
     | Ast.TString, Ast.TString -> true
     | Ast.TArray x, Ast.TArray y -> types_match_exact x y
-    (* TODO: exact inner types aren't comparable for functions and structs *)
+    (* TODO: exact inner types aren't comparable for functions *)
     | Ast.TFunction, Ast.TFunction -> true
-    | Ast.TStruct, Ast.TStruct -> true
+    | Ast.TStruct x, Ast.TStruct y -> x = y
     | _ -> false
 
 (* added compat checks for say floats and ints*)
@@ -32,7 +32,7 @@ let rec str_of_dt dt =
         | Ast.TArray x ->  str_of_dt x ^ "[]"
         | Ast.TFunction -> "fn"
         | Ast.TUnit -> "unit"
-        | Ast.TStruct -> "struct"
+        | Ast.TStruct name -> name ^ " (struct)"
 
 let create_new_scope outer_scope = { outer = outer_scope; tbl = Hashtbl.create 11 }
 
@@ -63,7 +63,7 @@ let rec type_check_return st cur_return_type (ret: Ast.statement) =
 and get_var_type st var: (Ast.data_type option) = match lookup_st st var with
     | Some VariableSymbol x -> Some x
     | Some FunctionSymbol (_param_dts, return_dt_op) -> return_dt_op
-    | Some StructSymbol _ -> Some Ast.TStruct
+    | Some StructSymbol _ -> Some (Ast.TStruct var)
     | None -> None
 
 and type_check_struct_expression st (exp: Ast.expr) =
@@ -71,26 +71,25 @@ and type_check_struct_expression st (exp: Ast.expr) =
     | StructExpr (type_name, expr_ht) ->
         let expected_members_ht = match lookup_st st type_name with
             | Some StructSymbol x -> Hashtbl.copy x
-            | Some x ->
-                    begin match get_var_type st type_name with
-                    | Some t -> raise (Type_mismatch_error (str_of_dt t, str_of_dt TStruct, exp.pos))
-                    | None -> raise (Type_undeclared_error (type_name, exp.pos))
-                    end
-            | None -> raise (Type_undeclared_error (type_name, exp.pos));
+            | _ ->
+                begin match get_var_type st type_name with
+                | Some t -> raise (Type_mismatch_error (str_of_dt t, str_of_dt (TStruct type_name), exp.pos))
+                | None -> raise (Type_undeclared_error (type_name, exp.pos))
+                end
         in
-        (* check all in the expression *)
+        (* check all fields in the current expression's ht *)
         Hashtbl.iter (fun var_name expr ->
             let stored_mem_type = begin match Hashtbl.find_opt expected_members_ht var_name with
                 | Some t -> t
                 | None -> raise (Type_custom_error (
-                    "Unknown struct member " ^ var_name
-                    ^ " for struct of type " ^ type_name, exp.pos
+                    "Unknown field " ^ var_name
+                    ^ " for type " ^ type_name, exp.pos
                     ))
                 end
             in
-            let dt = type_check_expr st expr in
-            if not (types_match dt stored_mem_type) then
-                raise (Type_mismatch_error (str_of_dt dt, str_of_dt stored_mem_type, exp.pos))
+            let field_dt = type_check_expr st expr in
+            if not (types_match field_dt stored_mem_type) then
+                raise (Type_mismatch_error (str_of_dt field_dt, str_of_dt stored_mem_type, exp.pos))
             else
                 Hashtbl.remove expected_members_ht var_name
         ) expr_ht;
@@ -102,9 +101,9 @@ and type_check_struct_expression st (exp: Ast.expr) =
                 |> Seq.map (fun (v, dt) -> str_of_dt dt ^ " " ^ v) |> List.of_seq)
             in
             raise (Type_custom_error ("Missing " ^ missing_fields
-                ^ " from struct of type " ^ type_name, exp.pos))
+                ^ " from type " ^ type_name, exp.pos))
         else
-            Ast.TStruct
+            Ast.TStruct type_name
 
     | _ -> failwith "Impossible"
 
@@ -136,7 +135,8 @@ and type_check_binary st (binary: Ast.expr) =
                         | _ -> raise (Type_invalid_operator_error (Ast.string_of_binary_op op, str_of_dt t1, str_of_dt t2, binary.pos))
                     end
 
-                | TFunction | TStruct -> raise (Type_invalid_operator_error (Ast.string_of_binary_op op, str_of_dt t1, str_of_dt t2, binary.pos))
+                | TFunction | TStruct _ ->
+                    raise (Type_invalid_operator_error (Ast.string_of_binary_op op, str_of_dt t1, str_of_dt t2, binary.pos))
 
                 | TString ->
                     begin match op with
@@ -265,18 +265,23 @@ and type_check_assignment st (exp: Ast.expr) = match exp.kind with
 
     | _ -> failwith "Impossible"
 
-and type_check_struct_access st exp =
+and type_check_struct_access st (exp: Ast.expr) =
     match exp.kind with
     | StructAccess (expr, id) ->
-        let t = type_check_expr st expr in
-        if t != TStruct then
-            raise (Type_mismatch_error (str_of_dt t, str_of_dt TStruct, exp.pos))
-        begin match lookup_st st id with
-            | Some StructSymbol ht ->
-                    begin match Hashtbl.find_opt ht id with
-                        | Some 
-                    end
-            | _ -> failwith "what should this be"
+        let type_name =
+            begin match type_check_expr st expr with
+                | TStruct x -> x
+                | x -> raise (Type_mismatch_error (str_of_dt x, "a struct type", expr.pos))
+            end
+        in
+        let fields_ht = match lookup_st st type_name with
+            | Some StructSymbol ht -> ht
+            | Some x -> raise (Type_custom_error ("Not a struct type", expr.pos))
+            | _ -> raise (Type_custom_error ("Struct type doesn't exist", exp.pos))
+        in
+        begin match Hashtbl.find_opt fields_ht id with
+            | Some dt -> dt
+            | None -> raise (Type_custom_error ("Field " ^ id ^ " doesn't exist on type " ^ type_name, exp.pos))
         end
 
     | _ -> failwith "Impossible"

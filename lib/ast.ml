@@ -25,7 +25,7 @@ type data_type =
     | TString
     | TArray of data_type
     | TFunction
-    | TStruct
+    | TStruct of string
     | TUnit
 
 and expr_kind =
@@ -93,7 +93,7 @@ let rec string_of_data_type dt = match dt with
     | TBoolean -> "TBoolean"
     | TString -> "TString"
     | TArray d -> "TArray of " ^ string_of_data_type d
-    | TStruct -> "TStruct"
+    | TStruct name -> "TStruct of " ^ name
     | TFunction -> "TFunction"
     | TUnit -> "TUnit"
 

@@ -29,7 +29,7 @@ exception Runtime_error of string
                 Some (Printf.sprintf "TypeError: operator '%s' not applicable for types %s and %s at %d:%d" op dt dt2 pos.line pos.column)
 
         | Type_undeclared_error (name, pos) ->
-                Some (Printf.sprintf "TypeError: variable %s not declared at %d:%d" name pos.line pos.column)
+                Some (Printf.sprintf "TypeError: variable '%s' not declared at %d:%d" name pos.line pos.column)
 
         | Type_custom_error (text, pos) ->
                 Some (Printf.sprintf "TypeError: %s at %d:%d" text pos.line pos.column)

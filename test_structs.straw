@@ -1,11 +1,6 @@
-struct cat = Animal {
+Animal cat = Animal {
     kind = 3,
     sound = "hiiii"
-}
-
-struct Person {
-    int age,
-    str name
 }
 
 struct Animal {
@@ -13,7 +8,6 @@ struct Animal {
     str sound
 }
 
-struct me = Person {
-    age = 10,
-    name = "dylan"
-}
+
+print(int_to_str(cat.kind))
+print(cat.sound)

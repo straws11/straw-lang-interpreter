@@ -29,7 +29,8 @@ open Exceptions
     for = "for" "(" for_initializer ";" for_condition ";" for_increment ")" block
     while = "while" expr block
     return = "return" [ expr ]
-    data_type = ( int | float | bool | str | func | struct ) ( [ "[" "]" ] ) *
+    builtin_data_type = ( int | float | bool | str | func )
+    data_type = ( builtin_data_type | IDENTIFIER ) ( [ "[" "]" ] )*
     declaration = data_type IDENTIFIER [ "=" expr ]
     statement = ( if | for | while | return | declaration | function_decl | struct_decl | expr_stmt )
     body = ( statement )*
@@ -129,16 +130,12 @@ let starts_primary tok = match tok with
 
 let starts_var_declaration parser = match peek parser with
     | Some Int | Some Float | Some Str | Some Bool | Some Func -> true
-    | Some Struct ->
-            ignore (advance parser);
-            begin match peek parser with
-                | Some Identifier _ -> begin match peek_next parser with
-                        | Some Equal -> ignore (retreat parser); true
-                        | Some LBrace -> ignore (retreat parser); false
-                        | _ -> failwith "todo this error"
-                    end
-                | _ -> ignore (retreat parser); false
-            end
+    (* struct var decl starts with 2 identifiers, the type then name *)
+    | Some Identifier _ ->
+        begin match peek_next parser with
+            | Some Identifier _ -> true
+            | _ -> false
+        end
     | _ -> false
 
 let starts_expr parser = match peek parser with
@@ -596,8 +593,21 @@ and parse_return parser =
             { kind = ReturnStmt (Some expr); pos = position }
 
         | _ -> { kind = ReturnStmt None; pos = unit_return_pos }
+
 (*
-    data_type = ( int | float | bool | str | func | struct ) ( [ "[" "]" ] ) *
+    builtin_data_type = ( int | float | bool | str | func )
+*)
+and parse_builtin_data_type parser =
+    match advance parser with
+        | Some Int -> Some TInteger
+        | Some Float -> Some TFloat
+        | Some Bool -> Some TBoolean
+        | Some Str -> Some TString
+        | Some Func -> Some TFunction
+        | _ -> ignore (retreat parser); None
+
+(*
+    data_type = ( builtin_data_type | IDENTIFIER ) ( [ "[" "]" ] ) *
 *)
 and parse_data_type parser =
     let rec loop inner = match peek parser with
@@ -608,16 +618,15 @@ and parse_data_type parser =
         | _ -> inner
     in
 
-    let base_type = match advance parser with
-        | Some Int -> TInteger
-        | Some Float -> TFloat
-        | Some Bool -> TBoolean
-        | Some Str -> TString
-        | Some Func -> TFunction
-        | Some Struct -> TStruct
-        | _ -> raise (Parse_error ("Data type expected", get_token_pos parser))
-    in
-    loop base_type
+    match parse_builtin_data_type parser with
+    (* Some builtin was found *)
+    | Some dt -> loop dt
+    (*No builtin, let's check other id option*)
+    | None ->
+        begin match peek parser with
+            | Some Identifier struct_name -> ignore (advance parser); loop (TStruct struct_name)
+            | Some _ | None -> raise (Parse_error ("Data type expected", get_token_pos parser))
+        end
 
 (*
     struct_decl = "struct" IDENTIFIER "{" data_type IDENTIFIER ( "," data_type IDENTIFIER )* "}"
@@ -640,9 +649,6 @@ and parse_struct_decl parser =
     let dt = parse_data_type parser in
     let field_name = expect_id parser in
     let contents = loop [(field_name, dt)] in
-    print_endline (String.concat "\n"
-        (List.map (fun (x, y) -> x ^ string_of_data_type y) contents)
-    );
     expect parser RBrace "Expected '}' for struct body end";
     let ht = Hashtbl.of_seq (List.to_seq contents) in
     { kind = StructDeclStmt (struct_name, ht); pos = position }
@@ -672,9 +678,8 @@ and parse_statement parser = match peek parser with
     | Some While -> parse_while parser
     | Some Return -> parse_return parser
     | Some Fn -> parse_function_decl parser
-    (* NOTE: the order below is important because starts_var_declaration will catch struct decl -> false *)
-    | Some _ when starts_var_declaration parser -> parse_declaration parser
     | Some Struct -> parse_struct_decl parser
+    | Some _ when starts_var_declaration parser -> parse_declaration parser
     | Some x when starts_expr parser -> {
             kind = ExprStmt (parse_expr parser); pos = get_token_pos parser
         }

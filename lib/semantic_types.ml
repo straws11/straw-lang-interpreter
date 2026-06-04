@@ -28,7 +28,6 @@ let string_of_symbol sym = match sym with
         )
         ^ ")"
 
-
 let insert_st cur_scope key value = Hashtbl.replace cur_scope.tbl key value
 
 let lookup_st cur_scope key =

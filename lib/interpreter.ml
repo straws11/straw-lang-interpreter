@@ -12,17 +12,25 @@ let rec v_type_to_t_type v_var = match v_var with
     (* BUG: this next line is probably wrong, what if array is empty *)
     | VArray vals -> TArray (v_type_to_t_type vals.(0))
     | VFunction _ -> TFunction
-    | VStruct _ -> TStruct
+    (* BUG: this next line is wrong *)
+    | VStruct _ -> TStruct "blahblah"
     | VUnit -> failwith "Impossible"
 
-let rec value_has_right_type v t = match v, t with
+let rec value_has_right_type env v t =
+    (* let rec struct_fields_match v_ht t_ht = *)
+    (* in *)
+    match v, t with
     | VInteger _, TInteger -> true
     | VFloat _, TFloat -> true
     | VBoolean _, TBoolean -> true
     | VString _, TString -> true
-    | VArray x, TArray dt -> value_has_right_type x.(0) dt
+    | VArray x, TArray dt -> value_has_right_type env x.(0) dt
     | VFunction _, TFunction -> true
-    | VStruct _, TStruct -> true
+    | VStruct x, TStruct y -> true
+        (* begin match lookup env y with *)
+        (* | Some  *)
+        (*     struct_fields_match x y *)
+        (* end *)
     | _ -> false
 
 let types_match t1 t2 = match t1, t2 with
@@ -144,6 +152,19 @@ and interpret_f_string env (expr: Ast.expr) =
     | _ -> failwith "Impossible"
 
 
+and interpret_struct_access env (expr: Ast.expr) =
+    match expr.kind with
+    | StructAccess (exp, id) ->
+        let v = interpret_expr env exp in
+        begin match v with
+            | VStruct ht ->
+                begin match Hashtbl.find_opt ht id with
+                    | Some v -> v
+                    | _ -> failwith "Impossible"
+                end
+            | _ -> failwith "Impossible"
+        end
+    | _ -> failwith "Impossible"
 
 and interpret_expr env (expr: Ast.expr)  = match expr.kind with
     | IntLit x -> VInteger x
@@ -172,7 +193,8 @@ and interpret_expr env (expr: Ast.expr)  = match expr.kind with
             let idx = interpret_expr env exp2 in
             interpret_index env var idx
 
-    | StructAccess (exp, id) -> raise (Runtime_error "Unimplemented")
+    | StructAccess (_, _) -> interpret_struct_access env expr
+
     | ArrayLength e ->
         let arr = interpret_expr env e in
         begin match arr with
@@ -331,10 +353,10 @@ and interpret_statement env (stmt: Ast.statement) = match stmt.kind with
     | VarDeclStmt (dt, name, expr_option) ->
         begin match expr_option with
             | Some e -> let exp = interpret_expr env e in
-                if value_has_right_type exp dt then
+                if value_has_right_type env exp dt then
                         insert env name exp
                 else
-                    raise (Runtime_error ("Incompatible types "
+                    raise (Runtime_error ("can this error be removed?Incompatible types "
                         ^ string_of_data_type (v_type_to_t_type exp)
                         ^ " and " ^ string_of_data_type dt))
 
