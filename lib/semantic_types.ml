@@ -1,6 +1,7 @@
 type symbol =
     | VariableSymbol of Ast.data_type
     | FunctionSymbol of Ast.data_type list * Ast.data_type option
+    | StructSymbol of (string, Ast.data_type) Hashtbl.t
 
 type symbol_table = (string, symbol) Hashtbl.t
 
@@ -19,6 +20,14 @@ let string_of_symbol sym = match sym with
             | None -> "unit"
             end
         ^ ")"
+    | StructSymbol members -> "StructSymbol("
+        ^ String.concat ", " (
+            Hashtbl.to_seq members
+            |> Seq.map (fun (name, dt) -> Ast.string_of_data_type dt ^ " " ^ name )
+            |> List.of_seq
+        )
+        ^ ")"
+
 
 let insert_st cur_scope key value = Hashtbl.replace cur_scope.tbl key value
 

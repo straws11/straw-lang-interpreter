@@ -25,7 +25,7 @@ type data_type =
     | TString
     | TArray of data_type
     | TFunction
-    | TStruct (*of (string, expr) Hashtbl.t*)
+    | TStruct
     | TUnit
 
 and expr_kind =
@@ -35,7 +35,7 @@ and expr_kind =
     | StrLit of string
     | FormattedStringLit of string list * expr list
     | ArrayContent of expr array
-    | StructExpr of (string, expr) Hashtbl.t
+    | StructExpr of string * (string, expr) Hashtbl.t
 
     | Variable of string
     | Call of expr * expr list
@@ -59,10 +59,9 @@ and statement_kind =
     | ReturnStmt of expr option
     | VarDeclStmt of data_type * string * expr option
     | FunDeclStmt of string * parameter list * data_type option * block
+    | StructDeclStmt of string * (string, data_type) Hashtbl.t
     | ExprStmt of expr (* example foo(1,2) or print(x) are expressions but they are used as statements ofc *)
     | BlockStmt of block
-    (* TODO: temp remove *)
-    | PrintStmt of expr
 
 and expr = {
     kind: expr_kind;
@@ -146,6 +145,17 @@ let rec string_of_expr depth expr =
                 line depth (String.concat ",\n" (Array.to_list (Array.map (string_of_expr (depth + 1)) contents)));
                 line depth ")";
         ]
+
+    | StructExpr (name, ht) ->
+        block depth [
+            line depth "StructExpr(";
+            line depth name;
+            line depth (String.concat ", "
+                (Hashtbl.to_seq ht |> Seq.map (fun (k, v) -> k ^ "=" ^ (string_of_expr 0 v)) |> List.of_seq)
+            );
+            line depth ")"
+        ]
+
     | Variable x -> line depth ("Variable(" ^ x ^ ")")
 
     | Call (callee, args) ->
@@ -259,13 +269,6 @@ and string_of_statement depth stmt =
             line depth ")";
         ]
 
-    | PrintStmt e ->
-        block depth [
-            line depth "PrintStmt(";
-            string_of_expr (depth + 1) e;
-            line depth ")";
-        ]
-
     | ReturnStmt eo ->
         block depth (
             line depth "Return(" ::
@@ -334,6 +337,16 @@ and string_of_statement depth stmt =
                 line depth ")";
             ]
         )
+    | StructDeclStmt (name, ht) ->
+        block depth [
+            line depth ("StructDecl(" ^ name);
+            string_of_param_list (depth + 1) (ht
+                |> Hashtbl.to_seq
+                |> Seq.map (fun (x, y) -> (y, x))
+                |> List.of_seq
+            );
+            line depth ")";
+        ]
 
     | BlockStmt b ->
         string_of_block depth b

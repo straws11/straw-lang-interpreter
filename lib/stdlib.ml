@@ -8,6 +8,9 @@ let rec val_to_str v = match v with
     | VFloat x -> string_of_float x
     | VArray x -> "[" ^ (String.concat ", " (Array.to_list (Array.map val_to_str x))) ^ "]"
     | VFunction x -> "cannot print function yet.."
+    | VStruct x -> "{" ^ String.concat ", " (
+        Hashtbl.to_seq x |> Seq.map (fun (k, v) -> k ^ " = " ^ val_to_str v) |> List.of_seq
+        ) ^ "}"
     | VUnit -> ""
 
 let print_fn params =

@@ -7,8 +7,9 @@ open Exceptions
     function_params = [ data_type IDENTIFIER ( "," data_type IDENTIFIER )* ]
     function_expr = "fn" "(" function_params ")" [ "->" data_type ] block
     function_decl = "fn" IDENTIFIER "(" function_params ")" [ "->" data_type ] block
+    struct_decl = "struct" IDENTIFIER "{" data_type IDENTIFIER ( "," data_type IDENTIFIER )* "}"
     array_content = "[" [ expr ( "," expr )* ]"]"
-    struct_expr = "{" [ IDENTIFIER "=" expr ( "," IDENTIFIER "=" expr )* ] "}"
+    struct_expr = IDENTIFIER "{" [ IDENTIFIER "=" expr ( "," IDENTIFIER "=" expr )* ] "}"
     primary = INTEGER | FLOAT | STRING | FORMATTED_STRING | BOOLEAN | IDENTIFIER | array_content | function_expr | struct_expr | "(" expr ")"
     expr_list = expr ( "," expr )*
     postfix = primary ( "(" expr_list ")" | "[" expr "]" | "." IDENTIFIER )*
@@ -28,9 +29,9 @@ open Exceptions
     for = "for" "(" for_initializer ";" for_condition ";" for_increment ")" block
     while = "while" expr block
     return = "return" [ expr ]
-    data_type = ( int | float | bool | str | func ) ( [ "[" "]" ] ) *
+    data_type = ( int | float | bool | str | func | struct ) ( [ "[" "]" ] ) *
     declaration = data_type IDENTIFIER [ "=" expr ]
-    statement = ( if | for | while | return | declaration | function_decl | expr_stmt )
+    statement = ( if | for | while | return | declaration | function_decl | struct_decl | expr_stmt )
     body = ( statement )*
 *)
 
@@ -84,6 +85,9 @@ let advance parser = if parser.pos >= Array.length parser.tokens then
         parser.pos <- parser.pos + 1;
         Some tok.kind
 
+let retreat parser =
+    parser.pos <- parser.pos - 1
+
 (* peek and advance if expected, else nothing *)
 let consume parser expected = match peek parser with
     | Some x when x = expected ->
@@ -120,11 +124,21 @@ let expect_id parser = match advance parser with
 
 (* TODO: should this be called starts_call?? *)
 let starts_primary tok = match tok with
-    | Identifier _ | String _ | FormattedString (_, _) | Boolean _ | Integer _ | FloatPoint _ | Fn | LBrack | LParen -> true
+    | Identifier _ | String _ | FormattedString (_, _) | Boolean _ | Integer _ | FloatPoint _ | Fn | LBrace | LBrack | LParen -> true
     | _ -> false
 
-let starts_declaration tok = match tok with
-    | Int | Float | Str | Bool | Func -> true
+let starts_var_declaration parser = match peek parser with
+    | Some Int | Some Float | Some Str | Some Bool | Some Func -> true
+    | Some Struct ->
+            ignore (advance parser);
+            begin match peek parser with
+                | Some Identifier _ -> begin match peek_next parser with
+                        | Some Equal -> ignore (retreat parser); true
+                        | Some LBrace -> ignore (retreat parser); false
+                        | _ -> failwith "todo this error"
+                    end
+                | _ -> ignore (retreat parser); false
+            end
     | _ -> false
 
 let starts_expr parser = match peek parser with
@@ -147,13 +161,14 @@ let rec parse_function_params parser =
             List.rev acc
     in
 
-    match peek parser with
-        | Some x when starts_declaration x ->
-                let dt = parse_data_type parser in
-                let id = expect_id parser in
-                loop [(dt, id)]
-        | Some x when x = RParen -> []
-        | _ -> raise (Parse_error ("Expected type for formal argument", get_token_pos parser))
+    if starts_var_declaration parser then
+        let dt = parse_data_type parser in
+        let id = expect_id parser in
+        loop [(dt, id)]
+    else if peek parser = Some RParen then
+        []
+    else
+        raise (Parse_error ("Expected type for formal argument", get_token_pos parser))
 
 (*
     function_expr = "fn" "(" function_params ")" [ "->" data_type ] block
@@ -221,7 +236,7 @@ and parse_formatted_string parser segments variables =
     FormattedStringLit (segments, loop variables)
 
 (*
-    struct_expr = "{" [ IDENTIFIER "=" expr ( "," IDENTIFIER "=" expr )* ] "}"
+    struct_expr = IDENTIFIER "{" IDENTIFIER "=" expr ( "," IDENTIFIER "=" expr )* "}"
 *)
 and parse_struct_expr parser =
     let rec loop entries = match peek parser with
@@ -231,23 +246,18 @@ and parse_struct_expr parser =
                 expect parser Equal "Expected '='";
                 let expr = parse_expr parser in
                 loop ((id, expr) :: entries)
-        | Some _ | None -> (List.rev keys, List.rev vals)
+        | Some _ | None -> List.rev entries
     in
 
-    match peek parser with
-        | Some Identifier x ->
-                let id = expect_id parser in
-                expect parser Equal "Expected '='";
-                let expr = parse_expr parser in
-                let entries = loop [(id, expr)] in
-                let ht = Hashtbl.create 3 in
-                Hashtbl.add_seq ht entries
-                StructExpr (Hashtbl.create 3)
-
-        | Some RBrace ->
-        | Some _ -> raise (Parse_error ("Unexpected token for struct body, expected identifier", get_token_pos parser))
-        | None -> raise (Parse_error ("Unexpected end of input", get_token_pos parser))
-
+    let name = expect_id parser in
+    expect parser LBrace "Expected '{' for struct instantiation";
+    let id = expect_id parser in
+    expect parser Equal "Expected '='";
+    let expr = parse_expr parser in
+    let content = loop [(id, expr)] in
+    expect parser RBrace "Expected '}' for struct instantiation end";
+    let ht = Hashtbl.of_seq (List.to_seq content) in
+    StructExpr (name, ht)
 
 (*
     primary = INTEGER | FLOAT | STRING | FORMATTED_STRING | BOOLEAN | IDENTIFIER | array_content | function_expr | struct_expr | "(" expr ")"
@@ -264,9 +274,11 @@ and parse_primary parser =
             | Integer x -> IntLit x
             | FloatPoint x -> FloatLit x
             | Boolean x -> BoolLit x
-            | Identifier x -> Variable x
+            | Identifier x -> begin match peek parser with
+                | Some LBrace -> ignore (retreat parser); parse_struct_expr parser
+                | _ -> Variable x
+                end
             | LBrack -> parse_array_content parser
-            | LBrace -> parse_struct_expr parser
             | LParen ->
                 let expr = parse_expr parser in
                 expect parser RParen "Expected ')' after expression";
@@ -490,12 +502,14 @@ and parse_if parser =
     for_initializer = [ assignment | declaration ]
 *)
 and parse_for_initializer parser =
-    match peek parser with
-        | Some x when starts_declaration x -> Some (parse_declaration parser)
-        | Some x when starts_expr parser -> Some ({
+    if starts_var_declaration parser then
+        Some (parse_declaration parser)
+    else if starts_expr parser then
+        Some ({
             kind = ExprStmt (parse_assignment parser); pos = get_token_pos parser
-            })
-        | _ -> None
+        })
+    else
+        None
 
 (*
     for_condition = [ expr ]
@@ -583,7 +597,7 @@ and parse_return parser =
 
         | _ -> { kind = ReturnStmt None; pos = unit_return_pos }
 (*
-    data_type = ( int | float | bool | str | func ) ( [ "[" "]" ] ) *
+    data_type = ( int | float | bool | str | func | struct ) ( [ "[" "]" ] ) *
 *)
 and parse_data_type parser =
     let rec loop inner = match peek parser with
@@ -600,9 +614,38 @@ and parse_data_type parser =
         | Some Bool -> TBoolean
         | Some Str -> TString
         | Some Func -> TFunction
+        | Some Struct -> TStruct
         | _ -> raise (Parse_error ("Data type expected", get_token_pos parser))
     in
     loop base_type
+
+(*
+    struct_decl = "struct" IDENTIFIER "{" data_type IDENTIFIER ( "," data_type IDENTIFIER )* "}"
+*)
+and parse_struct_decl parser =
+    let rec loop acc = match peek parser with
+        | Some Comma ->
+            ignore (advance parser);
+            let dt = parse_data_type parser in
+            let field_name = expect_id parser in
+            loop ((field_name, dt) :: acc)
+        | Some _ -> List.rev acc
+        | None -> raise (Parse_error ("Unexpected end of input", get_token_pos parser))
+    in
+
+    let position = get_token_pos parser in
+    expect parser Struct "Shouldn't happen";
+    let struct_name = expect_id parser in
+    expect parser LBrace "Expected '{' for struct body";
+    let dt = parse_data_type parser in
+    let field_name = expect_id parser in
+    let contents = loop [(field_name, dt)] in
+    print_endline (String.concat "\n"
+        (List.map (fun (x, y) -> x ^ string_of_data_type y) contents)
+    );
+    expect parser RBrace "Expected '}' for struct body end";
+    let ht = Hashtbl.of_seq (List.to_seq contents) in
+    { kind = StructDeclStmt (struct_name, ht); pos = position }
 
 (*
     declaration = data_type IDENTIFIER [ "=" expr ]
@@ -621,7 +664,7 @@ and parse_declaration parser =
     { kind = VarDeclStmt (data_type, id, init); pos = position }
 
 (*
-    statement = ( if | for | while | return | declaration | function_decl | expr_stmt )
+    statement = ( if | for | while | return | declaration | function_decl | struct_decl | expr_stmt )
  *)
 and parse_statement parser = match peek parser with
     | Some If -> parse_if parser
@@ -629,7 +672,9 @@ and parse_statement parser = match peek parser with
     | Some While -> parse_while parser
     | Some Return -> parse_return parser
     | Some Fn -> parse_function_decl parser
-    | Some x when starts_declaration x -> parse_declaration parser
+    (* NOTE: the order below is important because starts_var_declaration will catch struct decl -> false *)
+    | Some _ when starts_var_declaration parser -> parse_declaration parser
+    | Some Struct -> parse_struct_decl parser
     | Some x when starts_expr parser -> {
             kind = ExprStmt (parse_expr parser); pos = get_token_pos parser
         }

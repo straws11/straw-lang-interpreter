@@ -12,6 +12,7 @@ let rec v_type_to_t_type v_var = match v_var with
     (* BUG: this next line is probably wrong, what if array is empty *)
     | VArray vals -> TArray (v_type_to_t_type vals.(0))
     | VFunction _ -> TFunction
+    | VStruct _ -> TStruct
     | VUnit -> failwith "Impossible"
 
 let rec value_has_right_type v t = match v, t with
@@ -21,6 +22,7 @@ let rec value_has_right_type v t = match v, t with
     | VString _, TString -> true
     | VArray x, TArray dt -> value_has_right_type x.(0) dt
     | VFunction _, TFunction -> true
+    | VStruct _, TStruct -> true
     | _ -> false
 
 let types_match t1 t2 = match t1, t2 with
@@ -200,6 +202,14 @@ and interpret_expr env (expr: Ast.expr)  = match expr.kind with
         let fun_val = UserFunction (parameter_list, data_type, body) in
         VFunction fun_val
 
+    | StructExpr (name, ht) ->
+        let val_ht = Hashtbl.to_seq ht
+            |> Seq.map (fun (name, ex) -> (name, interpret_expr env ex))
+            |> Hashtbl.of_seq
+        in
+        VStruct val_ht
+
+
     | Group expr -> interpret_expr env expr
 
 and interpret_binary v1 op v2 = match op with
@@ -335,27 +345,13 @@ and interpret_statement env (stmt: Ast.statement) = match stmt.kind with
         let fun_val = UserFunction (parameter_list, data_type, body) in
         insert env name (VFunction fun_val);
 
+    | StructDeclStmt (type_name, members_ht) -> ()
+
         (* TODO: don't think this one is right *)
     | ExprStmt expr -> ignore (interpret_expr env expr);
 
     (* TODO: this is where the env stuff is necessary too *)
     | BlockStmt body -> interpret_block env body
-
-    (* TODO: temp remove *)
-    | PrintStmt expr ->
-        let e = interpret_expr env expr in
-        begin match e with
-            | VBoolean b -> print_endline (string_of_bool b)
-            | VInteger num -> print_endline (string_of_int num)
-            | VFloat num -> print_endline (string_of_float num)
-            | VString s -> print_endline s
-            | VArray vals -> print_endline ("[" ^ (String.concat ", " (
-                List.map string_of_value (Array.to_list vals)
-                )) ^ "]")
-            | VFunction _ -> raise (Runtime_error "Unimplemented")
-            | VUnit -> raise (Runtime_error "Cannot print unit type")
-        end
-
 
 and interpret_block env (ast: block): unit =
     let rec loop scope rem = match rem with
@@ -374,16 +370,18 @@ and interpret_block env (ast: block): unit =
     (* print_env new_scope *)
 
 and collect_statement env (stmt: Ast.statement) = match stmt.kind with
-    | Ast.VarDeclStmt (_, name, Some { kind = FunExpr (params, return_op, body); _ }) ->
+    | VarDeclStmt (_, name, Some { kind = FunExpr (params, return_op, body); _ }) ->
         let func_val = UserFunction (params, return_op, body) in
         insert env name (VFunction func_val)
 
-    | Ast.VarDeclStmt (dt, name, _expr_op) ->
+    | VarDeclStmt (dt, name, _expr_op) ->
         insert_empty env name (* insert that the var exists but ignore its type, we will deal later*)
 
-    | Ast.FunDeclStmt (name, params, return_op, body) ->
+    | FunDeclStmt (name, params, return_op, body) ->
             let func_val = UserFunction (params, return_op, body) in
             insert env name (VFunction func_val)
+
+    | StructDeclStmt (type_name, ht) -> ()
 
     | _ -> ()
 

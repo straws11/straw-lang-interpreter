@@ -9,6 +9,7 @@ and value =
         | VString of string
         | VArray of value array
         | VFunction of function_value
+        | VStruct of (string, value) Hashtbl.t
         | VUnit
 
 type environment = {
@@ -72,6 +73,12 @@ let rec string_of_value v = match v with
                 List.map string_of_value (Array.to_list vals)
                 )) ^ "]"
         | VFunction f -> string_of_function f
+        | VStruct ht -> "{"
+                ^ String.concat ", " (
+                        Hashtbl.to_seq ht
+                        |> Seq.map (fun (name, v) -> name ^ "=" ^ string_of_value v)
+                        |> List.of_seq
+                ) ^ "}"
         | VUnit -> "unit value"
 
 let string_of_value_option v = match v with

@@ -8,7 +8,9 @@ let rec types_match_exact t1 t2 = match t1, t2 with
     | Ast.TFloat, Ast.TFloat -> true
     | Ast.TString, Ast.TString -> true
     | Ast.TArray x, Ast.TArray y -> types_match_exact x y
+    (* TODO: exact inner types aren't comparable for functions and structs *)
     | Ast.TFunction, Ast.TFunction -> true
+    | Ast.TStruct, Ast.TStruct -> true
     | _ -> false
 
 (* added compat checks for say floats and ints*)
@@ -30,12 +32,12 @@ let rec str_of_dt dt =
         | Ast.TArray x ->  str_of_dt x ^ "[]"
         | Ast.TFunction -> "fn"
         | Ast.TUnit -> "unit"
+        | Ast.TStruct -> "struct"
 
 let create_new_scope outer_scope = { outer = outer_scope; tbl = Hashtbl.create 11 }
 
 let safe_array_get arr i =
     if i >= 0 && i < Array.length arr then Some arr.(i) else None
-
 
 let rec type_check_return st cur_return_type (ret: Ast.statement) =
     match ret.kind with
@@ -61,7 +63,51 @@ let rec type_check_return st cur_return_type (ret: Ast.statement) =
 and get_var_type st var: (Ast.data_type option) = match lookup_st st var with
     | Some VariableSymbol x -> Some x
     | Some FunctionSymbol (_param_dts, return_dt_op) -> return_dt_op
+    | Some StructSymbol _ -> Some Ast.TStruct
     | None -> None
+
+and type_check_struct_expression st (exp: Ast.expr) =
+    match exp.kind with
+    | StructExpr (type_name, expr_ht) ->
+        let expected_members_ht = match lookup_st st type_name with
+            | Some StructSymbol x -> Hashtbl.copy x
+            | Some x ->
+                    begin match get_var_type st type_name with
+                    | Some t -> raise (Type_mismatch_error (str_of_dt t, str_of_dt TStruct, exp.pos))
+                    | None -> raise (Type_undeclared_error (type_name, exp.pos))
+                    end
+            | None -> raise (Type_undeclared_error (type_name, exp.pos));
+        in
+        (* check all in the expression *)
+        Hashtbl.iter (fun var_name expr ->
+            let stored_mem_type = begin match Hashtbl.find_opt expected_members_ht var_name with
+                | Some t -> t
+                | None -> raise (Type_custom_error (
+                    "Unknown struct member " ^ var_name
+                    ^ " for struct of type " ^ type_name, exp.pos
+                    ))
+                end
+            in
+            let dt = type_check_expr st expr in
+            if not (types_match dt stored_mem_type) then
+                raise (Type_mismatch_error (str_of_dt dt, str_of_dt stored_mem_type, exp.pos))
+            else
+                Hashtbl.remove expected_members_ht var_name
+        ) expr_ht;
+
+        (* missing fields *)
+        if Hashtbl.length expected_members_ht > 0 then
+            let missing_fields = String.concat ", "
+                (Hashtbl.to_seq expected_members_ht
+                |> Seq.map (fun (v, dt) -> str_of_dt dt ^ " " ^ v) |> List.of_seq)
+            in
+            raise (Type_custom_error ("Missing " ^ missing_fields
+                ^ " from struct of type " ^ type_name, exp.pos))
+        else
+            Ast.TStruct
+
+    | _ -> failwith "Impossible"
+
 
 and type_check_binary st (binary: Ast.expr) =
     match binary.kind with
@@ -90,7 +136,7 @@ and type_check_binary st (binary: Ast.expr) =
                         | _ -> raise (Type_invalid_operator_error (Ast.string_of_binary_op op, str_of_dt t1, str_of_dt t2, binary.pos))
                     end
 
-                | TFunction -> raise (Type_invalid_operator_error (Ast.string_of_binary_op op, str_of_dt t1, str_of_dt t2, binary.pos))
+                | TFunction | TStruct -> raise (Type_invalid_operator_error (Ast.string_of_binary_op op, str_of_dt t1, str_of_dt t2, binary.pos))
 
                 | TString ->
                     begin match op with
@@ -265,6 +311,7 @@ and type_check_expr st (exp: Ast.expr) = match exp.kind with
     | Logical (_, _, _) -> type_check_logical st exp
     | Assign (_, _) -> type_check_assignment st exp
     | FunExpr (params, dt_option, body) -> type_check_function_block st params dt_option body; Ast.TFunction
+    | StructExpr _ -> type_check_struct_expression st exp
     | Group exp -> type_check_expr st exp
 
 and type_check_statement st (cur_ret_type: Ast.data_type option) (stmt: Ast.statement) = match stmt.kind with
@@ -310,11 +357,11 @@ and type_check_statement st (cur_ret_type: Ast.data_type option) (stmt: Ast.stat
     | FunDeclStmt (_name, params, dt_option, body) -> (* most already logged by first pass *)
             type_check_function_block st params dt_option body;
 
+    | StructDeclStmt (name, ht) -> print_endline "Struct doesn't have type check??";
+
     | ExprStmt exp -> ignore (type_check_expr st exp);
 
     | BlockStmt body -> ignore (type_check_block st cur_ret_type body);
-
-    | PrintStmt exp -> ignore (type_check_expr st exp);
 
 and type_check_statement_list st ret_type stmts =
     let rec loop scope lst = match lst with
@@ -343,19 +390,23 @@ and type_check_block st ret_type body =
 and type_check st ast = List.iter (type_check_statement st (Some TInteger)) ast
 
 and collect_statement sym_tbl (stmt: Ast.statement) = match stmt.kind with
-    | Ast.VarDeclStmt (_dt, name, Some { kind = FunExpr (params, return_op, _body); _ }) ->
+    | VarDeclStmt (_dt, name, Some { kind = FunExpr (params, return_op, _body); _ }) ->
         let param_dts = List.map (fun p -> fst p) params in
         let sym = FunctionSymbol (param_dts, return_op) in
         insert_st sym_tbl name sym
 
-    | Ast.VarDeclStmt (dt, name, _expr_op) ->
+    | VarDeclStmt (dt, name, _expr_op) ->
         let var_sym = VariableSymbol dt in
         insert_st sym_tbl name var_sym
 
-    | Ast.FunDeclStmt (name, params, return_op, _body) ->
+    | FunDeclStmt (name, params, return_op, _body) ->
             let param_dts = List.map (fun p -> fst p) params in
             let sym = FunctionSymbol (param_dts, return_op) in
             insert_st sym_tbl name sym
+
+    | StructDeclStmt (name, ht) ->
+            let members = Hashtbl.copy ht in
+            insert_st sym_tbl name (StructSymbol members)
 
     | _ -> ()
 

@@ -1,0 +1,19 @@
+struct cat = Animal {
+    kind = 3,
+    sound = "hiiii"
+}
+
+struct Person {
+    int age,
+    str name
+}
+
+struct Animal {
+    int kind,
+    str sound
+}
+
+struct me = Person {
+    age = 10,
+    name = "dylan"
+}
