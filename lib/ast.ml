@@ -24,7 +24,8 @@ type data_type =
     | TBoolean
     | TString
     | TArray of data_type
-    | TFunction
+    (* don't resolve the full type yet, just keep the expressions *)
+    | TFunction of expr list * expr option
     | TStruct of string
     | TUnit
 
@@ -97,10 +98,12 @@ let rec string_of_data_type dt = match dt with
     | TString -> "TString"
     | TArray d -> "TArray of " ^ string_of_data_type d
     | TStruct name -> "TStruct of " ^ name
-    | TFunction -> "TFunction"
+    | TFunction (exprs, return)-> "TFunction("
+        ^ String.concat ", " (List.map (string_of_expr 0) exprs)
+        ^ ") -> " ^ begin match return with | Some x -> string_of_expr 0 x | None -> "unit" end
     | TUnit -> "TUnit"
 
-let string_of_binary_op op = match op with
+and string_of_binary_op op = match op with
     | Add -> "+"
     | Sub -> "-"
     | Mul -> "*"
@@ -112,25 +115,25 @@ let string_of_binary_op op = match op with
     | GreaterOp -> ">"
     | GreaterEqualOp -> ">="
 
-let string_of_unary_op op = match op with
+and string_of_unary_op op = match op with
     | Not -> "!"
     | Negate -> "-"
 
-let string_of_logical_op op = match op with
+and string_of_logical_op op = match op with
     | AndOp -> "and"
     | OrOp -> "or"
 
-let string_of_param depth (dt, id) =
+and string_of_param depth (dt, id) =
     line depth (string_of_data_type dt ^ " " ^ id)
 
-let string_of_param_list depth params =
+and string_of_param_list depth params =
     block depth (
         line depth "[" ::
         (List.map (string_of_param (depth + 1)) params) @
         [line depth "]"]
     )
 
-let rec string_of_expr depth expr =
+and string_of_expr depth expr =
     match expr.kind with
     | IntLit x -> line depth ("IntLit(" ^ string_of_int x ^ ")")
     | FloatLit x -> line depth ("FloatLit(" ^ string_of_float x ^ ")")

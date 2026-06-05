@@ -615,7 +615,8 @@ and parse_builtin_data_type parser =
         | Some Float -> Some TFloat
         | Some Bool -> Some TBoolean
         | Some Str -> Some TString
-        | Some Func -> Some TFunction
+        (* so the TFunction has "empty type" as it's not resolved yet
+        | Some Func -> Some (TFunction ([], None))
         | _ -> ignore (retreat parser); None
 
 (*

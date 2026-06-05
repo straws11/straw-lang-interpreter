@@ -1,0 +1,12 @@
+fn make_counter() -> func {
+    int count = 0
+
+    return fn () -> int {
+        count = count + 1
+        return count
+    }
+}
+
+func counter = make_counter()
+
+print(int_to_str(counter(2)))

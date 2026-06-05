@@ -198,6 +198,7 @@ and type_check_call st (exp: Ast.expr) =
 
     match exp.kind with
     | Call (expr, param_exprs) ->
+        print_st st "before calling type check";
         begin match expr with
         (* TODO: FunExpr should also be able to match `fn (str smth){}("hi")` *)
         | { kind = Variable x; _ } ->
@@ -372,11 +373,16 @@ and type_check_statement st (cur_ret_type: Ast.data_type option) (stmt: Ast.stat
             let sym = FunctionSymbol (param_dts, return_op) in
             insert_st st name sym;
 
-        | Some e -> let exp_type = type_check_expr st e in
-            if types_match_exact dt exp_type then
-                insert_st st name (VariableSymbol dt)
-            else
-                raise (Type_mismatch_error (str_of_dt exp_type, str_of_dt dt, e.pos))
+        | Some e ->
+            let exp_type = type_check_expr st e in
+            begin match exp_type with
+                | TFunction -> 
+                | _ ->
+                    if types_match_exact dt exp_type then
+                        insert_st st name (VariableSymbol dt)
+                    else
+                        raise (Type_mismatch_error (str_of_dt exp_type, str_of_dt dt, e.pos))
+            end
         | None -> ()
         end;
 
@@ -421,9 +427,20 @@ and collect_statement sym_tbl (stmt: Ast.statement) = match stmt.kind with
         let sym = FunctionSymbol (param_dts, return_op) in
         insert_st sym_tbl name sym
 
-    | VarDeclStmt (dt, name, _expr_op) ->
-        let var_sym = VariableSymbol dt in
-        insert_st sym_tbl name var_sym
+    | VarDeclStmt (dt, name, expr_op) ->
+        begin match dt with
+        | TFunction ->
+            begin match expr_op with
+                | Some { kind = FunExpr (params, return_type, _body); _ } ->
+                    let param_dts = List.map (fun p -> fst p) params in
+                    let sym = FunctionSymbol (param_dts, return_type) in
+                    insert_st sym_tbl name sym
+                | _ -> ()
+            end
+        | _ ->
+            let var_sym = VariableSymbol dt in
+            insert_st sym_tbl name var_sym
+        end
 
     | FunDeclStmt (name, params, return_op, _body) ->
             let param_dts = List.map (fun p -> fst p) params in
