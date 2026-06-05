@@ -7,7 +7,19 @@ let rec val_to_str v = match v with
     | VBoolean x -> string_of_bool x
     | VFloat x -> string_of_float x
     | VArray x -> "[" ^ (String.concat ", " (Array.to_list (Array.map val_to_str x))) ^ "]"
-    | VFunction x -> "cannot print function yet.."
+    | VFunction x -> begin match x with
+        | UserFunction (params, return_op, _body) ->
+            "fn ("
+            ^ (String.concat ", " (List.map
+                (fun (dt, name) -> Ast.string_of_data_type dt ^ " " ^ name)
+            params))
+            ^ ")"
+            ^ begin match return_op with
+                | Some x -> " -> " ^ Ast.string_of_data_type x
+                | None -> " -> unit"
+                end
+        | BuiltinFunction x -> "Stdlib function"
+        end
     | VStruct x -> "{" ^ String.concat ", " (
         Hashtbl.to_seq x |> Seq.map (fun (k, v) -> k ^ " = " ^ val_to_str v) |> List.of_seq
         ) ^ "}"
@@ -38,6 +50,8 @@ let builtin_functions = [
     ("print", VFunction (BuiltinFunction print_fn));
     ("int_to_str", VFunction (BuiltinFunction str_fn));
     ("float_to_str", VFunction (BuiltinFunction str_fn));
+    ("bool_to_str", VFunction (BuiltinFunction str_fn));
+    ("func_to_str", VFunction (BuiltinFunction str_fn));
     ("input", VFunction (BuiltinFunction input_fn));
 ]
 
@@ -45,5 +59,7 @@ let builtin_symbols = [
     ("print", Semantic_types.FunctionSymbol ([TString], Some TUnit));
     ("int_to_str", Semantic_types.FunctionSymbol ([TInteger], Some TString));
     ("float_to_str", Semantic_types.FunctionSymbol ([TFloat], Some TString));
+    ("bool_to_str", Semantic_types.FunctionSymbol ([TBoolean], Some TString));
+    ("func_to_str", Semantic_types.FunctionSymbol ([TFunction], Some TString));
     ("input", Semantic_types.FunctionSymbol ([TString], Some TString))
 ]

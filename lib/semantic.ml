@@ -62,7 +62,7 @@ let rec type_check_return st cur_return_type (ret: Ast.statement) =
 
 and get_var_type st var: (Ast.data_type option) = match lookup_st st var with
     | Some VariableSymbol x -> Some x
-    | Some FunctionSymbol (_param_dts, return_dt_op) -> return_dt_op
+    | Some FunctionSymbol (_param_dts, _return_dt_op) -> Some TFunction
     | Some StructSymbol _ -> Some (Ast.TStruct var)
     | None -> None
 
@@ -300,6 +300,7 @@ and type_check_expr st (exp: Ast.expr) = match exp.kind with
     | ArrayContent x -> type_check_array_content st x
 
     | Variable x ->
+        print_endline (x);
         begin match get_var_type st x with
             | Some y -> y
             | None -> raise (Type_undeclared_error (x, exp.pos))

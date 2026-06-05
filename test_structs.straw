@@ -1,17 +1,45 @@
+struct More {
+    str gender
+}
+
 struct Animal {
     str name,
-    float age
+    float age,
+    More more_info
 }
 
 Animal[] farm_animals = [
-    Animal { name = "pig", age = 3.1 },
-    Animal { age = 1, name = "birb" },
-    Animal { age = 291.999, name = "me" }
+    Animal {
+        name = "pig",
+        age = 3.1,
+        more_info = More { gender = "male" }
+    },
+    Animal {
+        age = 1,
+        name = "birb",
+        more_info = More { gender = "female" }
+    },
+    Animal {
+        age = 291.999,
+        name = "me",
+        more_info = More { gender = "apache attack heli" }
+    }
 ]
 
-for (int i = 0; i < farm_animals.length; i = i + 1) {
+for (int i = 0; i < farm_animals.length; i++) {
     Animal a = farm_animals[i]
     print("Animal " + int_to_str(i) + ":")
     print(a.name)
     print(float_to_str(a.age))
+    print(a.more_info.gender)
 }
+
+fn print_animal(Animal an) {
+    print("Animal " + an.name)
+    print("\nwith age " + float_to_str(an.age))
+    print("\n with other info:\n")
+    print(an.more_info.gender)
+}
+
+print(func_to_str(print_animal))
+print_animal(farm_animals[0])
