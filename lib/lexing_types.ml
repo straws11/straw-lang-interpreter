@@ -28,6 +28,8 @@ type token_kind =
     | Less
     | LessEqual
     | Minus
+    | MinusMinus
+    | PlusPlus
     | Arrow
 
     (* literals *)
@@ -84,6 +86,8 @@ let rec string_of_token token_type = match token_type with
     | Less -> "Less"
     | LessEqual -> "LessEqual"
     | Minus -> "Minus"
+    | MinusMinus -> "MinusMinus"
+    | PlusPlus -> "PlusPlus"
     | Arrow -> "Arrow"
     | Identifier x -> "Identifier(" ^ x ^ ")"
     | String x -> "String(" ^ x ^ ")"

@@ -325,6 +325,12 @@ and type_check_expr st (exp: Ast.expr) = match exp.kind with
                 | _ -> raise (Type_custom_error ("Length can only be invoked on type array", exp.pos))
         end
 
+    | PostfixInc e | PostfixDec e ->
+        begin match type_check_expr st e with
+            | TInteger -> TInteger
+            | x -> raise (Type_mismatch_error (str_of_dt x, str_of_dt TInteger, e.pos))
+        end
+
     | Binary (_, _, _) -> type_check_binary st exp
     | Unary (_, _) -> type_check_unary st exp
     | Logical (_, _, _) -> type_check_logical st exp

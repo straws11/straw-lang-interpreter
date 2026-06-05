@@ -199,7 +199,10 @@ let next_token lexer =
             | ']' -> Lexing_types.RBrack
             | ',' -> Lexing_types.Comma
             | '.' -> Lexing_types.Dot
-            | '+' -> Lexing_types.Plus
+            | '+' -> if match_char lexer '+' then
+                        Lexing_types.PlusPlus
+                    else
+                        Lexing_types.Plus
             | ';' -> Lexing_types.Semicolon
             | '/' -> if match_char lexer '/' then
                     (skip_single_comment lexer;
@@ -233,6 +236,8 @@ let next_token lexer =
 
             | '-' -> if match_char lexer '>' then
                     Lexing_types.Arrow
+                else if match_char lexer '-' then
+                    Lexing_types.MinusMinus
                 else
                     Lexing_types.Minus
 

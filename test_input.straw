@@ -1,2 +1,4 @@
-roanasrietonarsoit(1+2*3) "hello world" var let
-== != > this fun and
+int mynum = 5
+int surely = mynum++
+print(int_to_str(mynum))
+print(int_to_str(surely))

@@ -43,6 +43,9 @@ and expr_kind =
     | StructAccess of expr * string
     | ArrayLength of expr
 
+    | PostfixInc of expr
+    | PostfixDec of expr
+
     | Binary of expr * binary_op * expr
     | Unary of unary_op * expr
     | Logical of expr * logical_op * expr
@@ -193,6 +196,20 @@ let rec string_of_expr depth expr =
     | ArrayLength e ->
         block depth [
             line depth "ArrayLength(";
+            string_of_expr (depth + 1) e;
+            line depth ")";
+        ]
+
+    | PostfixInc e ->
+        block depth [
+            line depth "PosfixInc(";
+            string_of_expr (depth + 1) e;
+            line depth ")";
+        ]
+
+    | PostfixDec e ->
+        block depth [
+            line depth "PosfixDec(";
             string_of_expr (depth + 1) e;
             line depth ")";
         ]

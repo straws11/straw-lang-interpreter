@@ -201,6 +201,29 @@ and interpret_expr env (expr: Ast.expr)  = match expr.kind with
             | _ -> failwith "Shouldn't happen"
         end
 
+    | PostfixInc e ->
+        begin match e.kind with
+            | Variable name ->
+                begin match interpret_expr env e with
+                | VInteger i ->
+                    update env name (VInteger (i + 1));
+                    VInteger (i + 1)
+                | _ -> failwith "Shouldn't happen"
+                end
+            | x -> raise (Runtime_error "Invalid '++' for type - must be variable")
+        end
+
+    | PostfixDec e ->
+        begin match e.kind with
+            | Variable name ->
+                begin match interpret_expr env e with
+                    | VInteger i ->
+                        update env name (VInteger (i - 1));
+                        VInteger (i - 1)
+                    | _ -> failwith "Shouldn't happen"
+                end
+            | x -> raise (Runtime_error "Invalid '--' for type - must be variable")
+        end
 
     | Binary (expr1, binary_op, expr2) ->
         let val1 = interpret_expr env expr1 in

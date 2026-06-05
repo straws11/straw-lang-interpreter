@@ -12,7 +12,7 @@ open Exceptions
     struct_expr = IDENTIFIER "{" [ IDENTIFIER "=" expr ( "," IDENTIFIER "=" expr )* ] "}"
     primary = INTEGER | FLOAT | STRING | FORMATTED_STRING | BOOLEAN | IDENTIFIER | array_content | function_expr | struct_expr | "(" expr ")"
     expr_list = expr ( "," expr )*
-    postfix = primary ( "(" expr_list ")" | "[" expr "]" | "." IDENTIFIER )*
+    postfix = primary ( "(" expr_list ")" | "[" expr "]" | "." IDENTIFIER )* [ "++" | "--" ]
     unary = ( "!" | "-" ) unary | postfix
     factor = unary ( ( "/" | "*" ) unary )*
     term = factor ( ( "+" | "-" ) factor )*
@@ -305,11 +305,23 @@ and parse_expr_list parser =
 
 
 (*
-    postfix = primary ( "(" expr_list ")" | "[" expr "]" | "." IDENTIFIER )*
+    postfix = primary ( "(" expr_list ")" | "[" expr "]" | "." IDENTIFIER )* [ "++" | "--" ]
 *)
 and parse_postfix parser: Ast.expr =
     let primary = parse_primary parser in
-    parse_postfix_tail parser primary
+    let p = parse_postfix_tail parser primary in
+    match peek parser with
+        | Some PlusPlus ->
+                let position = get_token_pos parser in
+                ignore (advance parser);
+                { kind = PostfixInc p; pos = position }
+
+        | Some MinusMinus ->
+                let position = get_token_pos parser in
+                ignore (advance parser);
+                { kind = PostfixDec p; pos = position }
+
+        | _ -> p
 
 and parse_postfix_tail parser inner =
     match peek parser with
