@@ -53,6 +53,7 @@ type token_kind =
     | Str
     | Bool
     | Func
+    | Let
     | Struct
     | While
 
@@ -112,6 +113,7 @@ let rec string_of_token token_type = match token_type with
     | Str -> "Str"
     | Bool -> "Bool"
     | Func -> "Func"
+    | Let -> "Let"
     | Struct -> "Struct"
     | While -> "While"
     | EOF -> "EOF"
@@ -133,6 +135,7 @@ let reserved_words = StringMap.of_seq @@ List.to_seq [
     ("str", Str);
     ("bool", Bool);
     ("func", Func);
+    ("let", Let);
     ("struct", Struct);
     ("while", While);
 ]

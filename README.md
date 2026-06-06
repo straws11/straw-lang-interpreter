@@ -7,9 +7,10 @@ Interpreter for StrawLang written in OCaml
 - [x] Formatted strings natively
     - Currently supports only variables of type string, no expressions or implicit type conversion
 - [x] Stdlib for print, read input
-- [ ] Structs
+- [x] Structs
 - [ ] Enum
 - [ ] match statement
 - [ ] allow single statement blocks for for/while/if
 - [ ] Else-if support
-- [ ] stdlib for type conversion
+- [ ] Allow closures
+- [x] stdlib for type conversion

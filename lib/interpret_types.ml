@@ -1,5 +1,5 @@
 type function_value =
-        | UserFunction of Ast.parameter list * Ast.data_type option * Ast.block
+        | UserFunction of Ast.parameter list * Ast.data_type * Ast.block
         | BuiltinFunction of (value list -> value)
 
 and value =
@@ -61,7 +61,7 @@ let rec string_of_param_list params =
     "[\n" ^ loop [] params ^ "]\n"
 
 let string_of_function f = match f with
-        | UserFunction (params, return, _body) -> "function:" ^ string_of_param_list params ^ (match return with Some x -> Ast.string_of_data_type x | None -> "")
+        | UserFunction (params, return, _body) -> "function:" ^ string_of_param_list params ^ Ast.string_of_data_type return
         | BuiltinFunction (_what) -> "stdlib function"
 
 let rec string_of_value v = match v with

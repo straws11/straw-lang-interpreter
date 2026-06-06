@@ -1,0 +1,11 @@
+let mynum = 5
+print(int_to_str(mynum))
+let mycoolfunction = func (int cool) -> int { return cool + 1 }
+print(int_to_str(mycoolfunction(100)))
+
+/*let unassigned
+unassigned = 10*/
+//print(int_to_str(unassigned))
+
+fn(int) -> int second = mycoolfunction
+print(int_to_str(second(981921)))

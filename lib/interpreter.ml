@@ -11,7 +11,10 @@ let rec v_type_to_t_type v_var = match v_var with
     | VString _ -> TString
     (* BUG: this next line is probably wrong, what if array is empty *)
     | VArray vals -> TArray (v_type_to_t_type vals.(0))
-    | VFunction _ -> TFunction
+    | VFunction UserFunction (params, ret, _block) ->
+        let param_dts = List.map (fun p -> fst p) params in
+        TFunction (param_dts, ret)
+    | VFunction BuiltinFunction f -> raise (Runtime_error "unable to can")
     (* BUG: this next line is wrong *)
     | VStruct _ -> TStruct "blahblah"
     | VUnit -> failwith "Impossible"
@@ -25,7 +28,14 @@ let rec value_has_right_type env v t =
     | VBoolean _, TBoolean -> true
     | VString _, TString -> true
     | VArray x, TArray dt -> value_has_right_type env x.(0) dt
-    | VFunction _, TFunction -> true
+    | VFunction UserFunction (params, ret, _block), TFunction (dts, r) ->
+        let contents = List.map2
+            Semantic.types_match
+            (ret :: (List.map fst params))
+            (r :: dts)
+        in
+        not (List.exists (fun x -> x = false) contents)
+
     | VStruct x, TStruct y -> true
         (* begin match lookup env y with *)
         (* | Some  *)

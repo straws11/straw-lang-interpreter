@@ -8,8 +8,14 @@ let rec types_match_exact t1 t2 = match t1, t2 with
     | Ast.TFloat, Ast.TFloat -> true
     | Ast.TString, Ast.TString -> true
     | Ast.TArray x, Ast.TArray y -> types_match_exact x y
-    (* TODO: exact inner types aren't comparable for functions *)
-    | Ast.TFunction, Ast.TFunction -> true
+    | Ast.TFunction (dt_list, return_dt), Ast.TFunction (bdt_list, breturn_dt) ->
+        let match_statuses = (List.map2
+            types_match_exact
+            (return_dt :: dt_list)
+            (breturn_dt :: bdt_list)
+        ) in
+        not (List.exists (fun x -> x = false) match_statuses)
+
     | Ast.TStruct x, Ast.TStruct y -> x = y
     | _ -> false
 
@@ -30,8 +36,12 @@ let rec str_of_dt dt =
         | Ast.TInteger -> "int"
         | Ast.TFloat -> "float"
         | Ast.TArray x ->  str_of_dt x ^ "[]"
-        | Ast.TFunction -> "fn"
+        | Ast.TFunction (dts, return_dt)-> "fn ("
+            ^ (String.concat ", " (List.map str_of_dt dts))
+            ^ str_of_dt return_dt
+            ^ ")"
         | Ast.TUnit -> "unit"
+        | Ast.TImplicit -> "implicit, idk if this should ever display lol"
         | Ast.TStruct name -> name ^ " (struct)"
 
 let create_new_scope outer_scope = { outer = outer_scope; tbl = Hashtbl.create 11 }
@@ -47,22 +57,23 @@ let rec type_check_return st cur_return_type (ret: Ast.statement) =
             | None -> None
         in
         begin match cur_return_type, exp_type with
-            | Some return_type, Some ex ->
+            | Ast.TUnit, Some x ->
+                raise (Type_custom_error ("Return is of type unit but found expression of type " ^ str_of_dt x, ret.pos))
+
+            | return_type, Some ex ->
                 if not (types_match_exact return_type ex) then
                     raise (Type_mismatch_error (str_of_dt ex, str_of_dt return_type, ret.pos))
                 else
                     ()
 
-            | Some return_type, None -> raise (Type_custom_error ("Missing return type of " ^ str_of_dt return_type, ret.pos))
-
-            | None, Some x -> raise (Type_custom_error ("Return is of type unit but found expression of type " ^ str_of_dt x, ret.pos))
-            | None, None -> ()
+            | return_type, None -> raise (Type_custom_error ("Missing return type of " ^ str_of_dt return_type, ret.pos))
         end
     | _ -> failwith "Impossible"
 
 and get_var_type st var: (Ast.data_type option) = match lookup_st st var with
     | Some VariableSymbol x -> Some x
-    | Some FunctionSymbol (_param_dts, _return_dt_op) -> Some TFunction
+    | Some FunctionSymbol (param_dts, return_dt) ->
+        Some (TFunction (param_dts, return_dt))
     | Some StructSymbol _ -> Some (Ast.TStruct var)
     | None -> None
 
@@ -135,8 +146,10 @@ and type_check_binary st (binary: Ast.expr) =
                         | _ -> raise (Type_invalid_operator_error (Ast.string_of_binary_op op, str_of_dt t1, str_of_dt t2, binary.pos))
                     end
 
-                | TFunction | TStruct _ ->
+                | TFunction (_, _) | TStruct _ ->
                     raise (Type_invalid_operator_error (Ast.string_of_binary_op op, str_of_dt t1, str_of_dt t2, binary.pos))
+
+                | TImplicit -> failwith "Shouldn't happen"
 
                 | TString ->
                     begin match op with
@@ -203,13 +216,10 @@ and type_check_call st (exp: Ast.expr) =
         (* TODO: FunExpr should also be able to match `fn (str smth){}("hi")` *)
         | { kind = Variable x; _ } ->
             begin match lookup_st st x with
-                | Some FunctionSymbol (param_dts, ret_dt_op) -> (
+                | Some FunctionSymbol (param_dts, ret_dt) ->
                     loop st param_exprs param_dts;
-                    begin match ret_dt_op with
-                        | Some x -> x
-                        | None -> TUnit
-                    end
-                    )
+                    ret_dt
+
                 | Some VariableSymbol dt -> raise (Type_custom_error ("Variable of type " ^ str_of_dt dt ^ " not callable", exp.pos))
                 | _ -> raise (Type_custom_error ("Undefined variable not callable", exp.pos))
             end
@@ -337,11 +347,14 @@ and type_check_expr st (exp: Ast.expr) = match exp.kind with
     | Unary (_, _) -> type_check_unary st exp
     | Logical (_, _, _) -> type_check_logical st exp
     | Assign (_, _) -> type_check_assignment st exp
-    | FunExpr (params, dt_option, body) -> type_check_function_block st params dt_option body; Ast.TFunction
+    | FunExpr (params, dt, body) ->
+        type_check_function_block st params dt body;
+        let param_dts = List.map (fun p -> fst p) params in
+        Ast.TFunction (param_dts, dt)
     | StructExpr _ -> type_check_struct_expression st exp
     | Group exp -> type_check_expr st exp
 
-and type_check_statement st (cur_ret_type: Ast.data_type option) (stmt: Ast.statement) = match stmt.kind with
+and type_check_statement st (cur_ret_type: Ast.data_type) (stmt: Ast.statement) = match stmt.kind with
     | IfStmt (exp, body, else_body_op) ->
             let exp_type = type_check_expr st exp in
             begin match exp_type with
@@ -366,28 +379,41 @@ and type_check_statement st (cur_ret_type: Ast.data_type option) (stmt: Ast.stat
 
     | ReturnStmt _ -> ignore (type_check_return st cur_ret_type stmt);
 
+(*
+    let a = 5
+    int a = 5
+    int a
+    let b = func (int, int) -> bool {}
+    fn(int) -> bool mything = func (int) -> bool {}
+    fn(int) -> bool mything
+    let c // INVALID
+*)
     | VarDeclStmt (dt, name, exp_op) ->
         begin match exp_op with
-        | Some { kind = FunExpr (params, return_op, _body); _ } ->
-            let param_dts = List.map (fun p -> fst p) params in
-            let sym = FunctionSymbol (param_dts, return_op) in
-            insert_st st name sym;
+            | Some e ->
+                let e_type = type_check_expr st e in
+                (* insert appropriate symbol for the type (functions are different) *)
+                begin match e_type with
+                    | TFunction (param_dts, return_dt) ->
+                        let sym = FunctionSymbol (param_dts, return_dt) in
+                        insert_st st name sym;
+                    | _ ->
+                        let sym = VariableSymbol e_type in
+                        insert_st st name sym;
+                end;
+                (* set the type for those that were implicit and typecheck those that were explicit *)
+                begin match dt with
+                    | TImplicit -> stmt.kind <- VarDeclStmt (e_type, name, exp_op);
+                    | found_type -> if not (types_match_exact found_type e_type) then
+                            raise (Type_mismatch_error (str_of_dt found_type, str_of_dt e_type, e.pos))
+                end
+            (* no explicit type on lhs, rhs must be present *)
+            | None -> if dt = TImplicit then
+                raise (Type_custom_error ("Type cannot be determined, be explicit", stmt.pos))
+        end
 
-        | Some e ->
-            let exp_type = type_check_expr st e in
-            begin match exp_type with
-                | TFunction -> 
-                | _ ->
-                    if types_match_exact dt exp_type then
-                        insert_st st name (VariableSymbol dt)
-                    else
-                        raise (Type_mismatch_error (str_of_dt exp_type, str_of_dt dt, e.pos))
-            end
-        | None -> ()
-        end;
-
-    | FunDeclStmt (_name, params, dt_option, body) -> (* most already logged by first pass *)
-            type_check_function_block st params dt_option body;
+    | FunDeclStmt (_name, params, dt, body) -> (* most already logged by first pass *)
+            type_check_function_block st params dt body;
 
     | StructDeclStmt (name, ht) -> print_endline "Struct doesn't have type check??";
 
@@ -402,7 +428,7 @@ and type_check_statement_list st ret_type stmts =
     in
     loop st stmts
 
-and type_check_function_block st params dt_option body =
+and type_check_function_block st params dt body =
     let rec loop st lst = match lst with
         | h :: t ->
                 let sym = VariableSymbol (fst h) in
@@ -413,13 +439,13 @@ and type_check_function_block st params dt_option body =
 
     let inner_scope: scope = create_new_scope (Some st) in
     loop inner_scope params;
-    type_check_statement_list inner_scope dt_option body
+    type_check_statement_list inner_scope dt body
 
 and type_check_block st ret_type body =
     let inner_scope: scope = create_new_scope (Some st) in
     type_check_statement_list inner_scope ret_type body
 
-and type_check st ast = List.iter (type_check_statement st (Some TInteger)) ast
+and type_check st ast = List.iter (type_check_statement st TInteger) ast
 
 and collect_statement sym_tbl (stmt: Ast.statement) = match stmt.kind with
     | VarDeclStmt (_dt, name, Some { kind = FunExpr (params, return_op, _body); _ }) ->
@@ -429,14 +455,10 @@ and collect_statement sym_tbl (stmt: Ast.statement) = match stmt.kind with
 
     | VarDeclStmt (dt, name, expr_op) ->
         begin match dt with
-        | TFunction ->
-            begin match expr_op with
-                | Some { kind = FunExpr (params, return_type, _body); _ } ->
-                    let param_dts = List.map (fun p -> fst p) params in
-                    let sym = FunctionSymbol (param_dts, return_type) in
-                    insert_st sym_tbl name sym
-                | _ -> ()
-            end
+        | TFunction (param_dts, return_dt) ->
+            let sym = FunctionSymbol (param_dts, return_dt) in
+            insert_st sym_tbl name sym
+        | TImplicit -> ()
         | _ ->
             let var_sym = VariableSymbol dt in
             insert_st sym_tbl name var_sym

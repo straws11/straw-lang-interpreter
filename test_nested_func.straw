@@ -1,12 +1,12 @@
-fn make_counter() -> func {
+func make_counter() -> fn() -> int {
     int count = 0
 
-    return fn () -> int {
+    return func () -> int {
         count = count + 1
         return count
     }
 }
 
-func counter = make_counter()
+let counter = make_counter()
 
-print(int_to_str(counter(2)))
+print(int_to_str(counter()))

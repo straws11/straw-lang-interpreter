@@ -24,9 +24,9 @@ type data_type =
     | TBoolean
     | TString
     | TArray of data_type
-    (* don't resolve the full type yet, just keep the expressions *)
-    | TFunction of expr list * expr option
+    | TFunction of data_type list * data_type
     | TStruct of string
+    | TImplicit (* this one shouldn't exist after semantic analysis *)
     | TUnit
 
 and expr_kind =
@@ -52,7 +52,7 @@ and expr_kind =
     | Logical of expr * logical_op * expr
 
     | Assign of expr * expr
-    | FunExpr of parameter list * data_type option * block
+    | FunExpr of parameter list * data_type * block
 
     | Group of expr
 
@@ -62,7 +62,7 @@ and statement_kind =
     | WhileStmt of expr * block
     | ReturnStmt of expr option
     | VarDeclStmt of data_type * string * expr option
-    | FunDeclStmt of string * parameter list * data_type option * block
+    | FunDeclStmt of string * parameter list * data_type * block
     | StructDeclStmt of string * (string, data_type) Hashtbl.t
     | ExprStmt of expr (* example foo(1,2) or print(x) are expressions but they are used as statements ofc *)
     | BlockStmt of block
@@ -73,7 +73,7 @@ and expr = {
 }
 
 and statement = {
-    kind: statement_kind;
+    mutable kind: statement_kind;
     pos: Lexing_types.position;
 }
 
@@ -98,10 +98,11 @@ let rec string_of_data_type dt = match dt with
     | TString -> "TString"
     | TArray d -> "TArray of " ^ string_of_data_type d
     | TStruct name -> "TStruct of " ^ name
-    | TFunction (exprs, return)-> "TFunction("
-        ^ String.concat ", " (List.map (string_of_expr 0) exprs)
-        ^ ") -> " ^ begin match return with | Some x -> string_of_expr 0 x | None -> "unit" end
+    | TFunction (dts, return) -> "TFunction("
+        ^ String.concat ", " (List.map string_of_data_type dts)
+        ^ ") -> " ^ string_of_data_type return
     | TUnit -> "TUnit"
+    | TImplicit -> "TImplicit"
 
 and string_of_binary_op op = match op with
     | Add -> "+"
@@ -253,14 +254,7 @@ and string_of_expr depth expr =
             [
                 line depth "FunExpr(";
                 string_of_param_list (depth + 1) params;
-            ]
-            @
-            (match return_type with
-            | Some rt ->
-                [line (depth + 1) ("ReturnType(" ^ string_of_data_type rt ^ ")")]
-            | None -> [])
-            @
-            [
+                line (depth + 1) ("ReturnType(" ^ string_of_data_type return_type ^ ")");
                 string_of_block (depth + 1) body;
                 line depth ")";
             ]
@@ -345,16 +339,7 @@ and string_of_statement depth stmt =
             [
                 line depth ("FunDecl(" ^ name);
                 string_of_param_list (depth + 1) params;
-            ]
-            @
-            (match return_type with
-            | Some rt ->
-                [line (depth + 1) ("ReturnType(" ^ string_of_data_type rt ^ ")")]
-            | None -> [])
-            @
-            [
-                string_of_block (depth + 1) body;
-                line depth ")";
+                line (depth + 1) ("ReturnType(" ^ string_of_data_type return_type ^ ")");
             ]
         )
     | StructDeclStmt (name, ht) ->

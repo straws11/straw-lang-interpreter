@@ -5,8 +5,8 @@ open Exceptions
 ----EBNF----
 
     function_params = [ data_type IDENTIFIER ( "," data_type IDENTIFIER )* ]
-    function_expr = "fn" "(" function_params ")" [ "->" data_type ] block
-    function_decl = "fn" IDENTIFIER "(" function_params ")" [ "->" data_type ] block
+    function_expr = "func" "(" function_params ")" [ "->" data_type ] block
+    function_decl = "func" IDENTIFIER "(" function_params ")" [ "->" data_type ] block
     struct_decl = "struct" IDENTIFIER "{" data_type IDENTIFIER ( "," data_type IDENTIFIER )* "}"
     array_content = "[" [ expr ( "," expr )* ]"]"
     struct_expr = IDENTIFIER "{" [ IDENTIFIER "=" expr ( "," IDENTIFIER "=" expr )* ] "}"
@@ -29,10 +29,12 @@ open Exceptions
     for = "for" "(" for_initializer ";" for_condition ";" for_increment ")" block
     while = "while" expr block
     return = "return" [ expr ]
-    builtin_data_type = ( int | float | bool | str | func )
+    function_type = "fn" "(" [ data_type ( "," data_type )* ] ")" [ "->" data_type ]
+    builtin_data_type = ( int | float | bool | str | function_type )
     data_type = ( builtin_data_type | IDENTIFIER ) ( [ "[" "]" ] )*
+    implicit_declaration = "let" IDENTIFIER "=" expr
     declaration = data_type IDENTIFIER [ "=" expr ]
-    statement = ( if | for | while | return | declaration | function_decl | struct_decl | expr_stmt )
+    statement = ( if | for | while | return | declaration | implicit_declaration | function_decl | struct_decl | expr_stmt )
     body = ( statement )*
 *)
 
@@ -125,11 +127,11 @@ let expect_id parser = match advance parser with
 
 (* TODO: should this be called starts_call?? *)
 let starts_primary tok = match tok with
-    | Identifier _ | String _ | FormattedString (_, _) | Boolean _ | Integer _ | FloatPoint _ | Fn | LBrace | LBrack | LParen -> true
+    | Identifier _ | String _ | FormattedString (_, _) | Boolean _ | Integer _ | FloatPoint _ | Func | LBrace | LBrack | LParen -> true
     | _ -> false
 
-let starts_var_declaration parser = match peek parser with
-    | Some Int | Some Float | Some Str | Some Bool | Some Func -> true
+let starts_data_type parser = match peek parser with
+    | Some Int | Some Float | Some Str | Some Bool | Some Fn | Some Let -> true
     (* struct var decl starts with 2 identifiers, the type then name OR identifier then '[' for array *)
     | Some Identifier _ ->
         begin match peek_next parser with
@@ -137,6 +139,10 @@ let starts_var_declaration parser = match peek parser with
             | _ -> false
         end
     | _ -> false
+
+let starts_var_decl parser = match peek parser with
+    | Some Let -> true
+    | _ -> starts_data_type parser
 
 let starts_expr parser = match peek parser with
     | Some x when starts_primary x -> true
@@ -158,7 +164,7 @@ let rec parse_function_params parser =
             List.rev acc
     in
 
-    if starts_var_declaration parser then
+    if starts_data_type parser then
         let dt = parse_data_type parser in
         let id = expect_id parser in
         loop [(dt, id)]
@@ -168,36 +174,36 @@ let rec parse_function_params parser =
         raise (Parse_error ("Expected type for formal argument", get_token_pos parser))
 
 (*
-    function_expr = "fn" "(" function_params ")" [ "->" data_type ] block
+    function_expr = "func" "(" function_params ")" [ "->" data_type ] block
 *)
 and parse_function_expr parser : expr =
     let position = get_token_pos parser in
-    expect parser Fn "Shouldn't happen";
+    expect parser Func "Shouldn't happen";
     expect parser LParen "Expected '('";
     let params = parse_function_params parser in
     expect parser RParen "Unclosed function params";
     let dt = if consume parser Arrow then
-        Some (parse_data_type parser)
+        parse_data_type parser
     else
-        None
+        TUnit
     in
     let block = parse_block parser in
     { kind = FunExpr (params, dt, block); pos = position }
 
 (*
-    function_decl = "fn" IDENTIFIER "(" function_params ")" [ "->" data_type ] block
+    function_decl = "func" IDENTIFIER "(" function_params ")" [ "->" data_type ] block
 *)
 and parse_function_decl parser =
     let position = get_token_pos parser in
-    expect parser Fn "Shouldn't happen";
+    expect parser Func "Shouldn't happen";
     let id = expect_id parser in
     expect parser LParen "Expected '('";
     let params = parse_function_params parser in
     expect parser RParen "Unclosed function params";
     let dt = if consume parser Arrow then
-        Some (parse_data_type parser)
+        parse_data_type parser
     else
-        None
+        TUnit
     in
     let block = parse_block parser in
     { kind = FunDeclStmt (id, params, dt, block); pos = position }
@@ -261,7 +267,7 @@ and parse_struct_expr parser =
 *)
 and parse_primary parser =
     match peek parser with
-        | Some Fn -> parse_function_expr parser
+        | Some Func -> parse_function_expr parser
         | Some tok ->
             let position = get_token_pos parser in
             ignore (advance parser);
@@ -508,11 +514,15 @@ and parse_if parser =
         | _ -> { kind = IfStmt (expr, then_body, None); pos = position }
 
 (*
-    for_initializer = [ assignment | declaration ]
+    for_initializer = [ assignment | declaration | implicit_declaration ]
 *)
 and parse_for_initializer parser =
-    if starts_var_declaration parser then
+    if peek parser = Some Let then
+        Some (parse_implicit_declaration parser)
+
+    else if starts_var_decl parser then
         Some (parse_declaration parser)
+
     else if starts_expr parser then
         Some ({
             kind = ExprStmt (parse_assignment parser); pos = get_token_pos parser
@@ -607,7 +617,32 @@ and parse_return parser =
         | _ -> { kind = ReturnStmt None; pos = unit_return_pos }
 
 (*
-    builtin_data_type = ( int | float | bool | str | func )
+    function_type = "fn" "(" [ data_type ( "," data_type )* ] ")" [ "->" data_type ]
+*)
+and parse_function_type parser =
+    let rec loop acc = match peek parser with
+        | Some Comma ->
+            ignore (advance parser);
+            let dt = parse_data_type parser in
+            loop (dt :: acc)
+        | Some _ -> List.rev acc
+        | None -> raise (Parse_error ("Unexpected end of input", get_token_pos parser))
+    in
+
+    expect parser Fn "Expected 'fn' keyword";
+    expect parser LParen "Expected opening '('";
+    let sig_params = if starts_data_type parser then
+        let dt = parse_data_type parser in
+        loop [dt]
+    else
+        []
+    in
+    expect parser RParen "Expected closing ')'";
+    let return_dt = if consume parser Arrow then parse_data_type parser else TUnit in
+    TFunction (sig_params, return_dt)
+
+(*
+    builtin_data_type = ( int | float | bool | str | function_type )
 *)
 and parse_builtin_data_type parser =
     match advance parser with
@@ -615,8 +650,8 @@ and parse_builtin_data_type parser =
         | Some Float -> Some TFloat
         | Some Bool -> Some TBoolean
         | Some Str -> Some TString
-        (* so the TFunction has "empty type" as it's not resolved yet
-        | Some Func -> Some (TFunction ([], None))
+        | Some Fn -> ignore (retreat parser);
+            Some (parse_function_type parser)
         | _ -> ignore (retreat parser); None
 
 (*
@@ -667,6 +702,17 @@ and parse_struct_decl parser =
     { kind = StructDeclStmt (struct_name, ht); pos = position }
 
 (*
+    implicit_declaration = "let" IDENTIFIER "=" expr
+*)
+and parse_implicit_declaration parser =
+    let position = get_token_pos parser in
+    expect parser Let "Expected 'let'";
+    let id = expect_id parser in
+    expect parser Equal "Expected '='. Implicit variables must be assigned a value";
+    let expr = parse_expr parser in
+    { kind = VarDeclStmt (TImplicit, id, Some expr); pos = position}
+
+(*
     declaration = data_type IDENTIFIER [ "=" expr ]
 *)
 and parse_declaration parser =
@@ -683,16 +729,17 @@ and parse_declaration parser =
     { kind = VarDeclStmt (data_type, id, init); pos = position }
 
 (*
-    statement = ( if | for | while | return | declaration | function_decl | struct_decl | expr_stmt )
+    statement = ( if | for | while | return | declaration | implicit_declaration | function_decl | struct_decl | expr_stmt )
  *)
 and parse_statement parser = match peek parser with
     | Some If -> parse_if parser
     | Some For -> parse_for parser
     | Some While -> parse_while parser
     | Some Return -> parse_return parser
-    | Some Fn -> parse_function_decl parser
+    | Some Func -> parse_function_decl parser
     | Some Struct -> parse_struct_decl parser
-    | Some _ when starts_var_declaration parser -> parse_declaration parser
+    | Some Let -> parse_implicit_declaration parser
+    | Some _ when starts_data_type parser -> parse_declaration parser
     | Some x when starts_expr parser -> {
             kind = ExprStmt (parse_expr parser); pos = get_token_pos parser
         }

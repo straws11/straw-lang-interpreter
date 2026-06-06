@@ -8,16 +8,14 @@ let rec val_to_str v = match v with
     | VFloat x -> string_of_float x
     | VArray x -> "[" ^ (String.concat ", " (Array.to_list (Array.map val_to_str x))) ^ "]"
     | VFunction x -> begin match x with
-        | UserFunction (params, return_op, _body) ->
+        | UserFunction (params, return, _body) ->
             "fn ("
             ^ (String.concat ", " (List.map
                 (fun (dt, name) -> Ast.string_of_data_type dt ^ " " ^ name)
             params))
             ^ ")"
-            ^ begin match return_op with
-                | Some x -> " -> " ^ Ast.string_of_data_type x
-                | None -> " -> unit"
-                end
+            ^ " -> " ^ Ast.string_of_data_type return
+
         | BuiltinFunction x -> "Stdlib function"
         end
     | VStruct x -> "{" ^ String.concat ", " (
@@ -51,15 +49,15 @@ let builtin_functions = [
     ("int_to_str", VFunction (BuiltinFunction str_fn));
     ("float_to_str", VFunction (BuiltinFunction str_fn));
     ("bool_to_str", VFunction (BuiltinFunction str_fn));
-    ("func_to_str", VFunction (BuiltinFunction str_fn));
+    (* ("func_to_str", VFunction (BuiltinFunction str_fn)); *)
     ("input", VFunction (BuiltinFunction input_fn));
 ]
 
 let builtin_symbols = [
-    ("print", Semantic_types.FunctionSymbol ([TString], Some TUnit));
-    ("int_to_str", Semantic_types.FunctionSymbol ([TInteger], Some TString));
-    ("float_to_str", Semantic_types.FunctionSymbol ([TFloat], Some TString));
-    ("bool_to_str", Semantic_types.FunctionSymbol ([TBoolean], Some TString));
-    ("func_to_str", Semantic_types.FunctionSymbol ([TFunction], Some TString));
-    ("input", Semantic_types.FunctionSymbol ([TString], Some TString))
+    ("print", Semantic_types.FunctionSymbol ([TString], TUnit));
+    ("int_to_str", Semantic_types.FunctionSymbol ([TInteger], TString));
+    ("float_to_str", Semantic_types.FunctionSymbol ([TFloat], TString));
+    ("bool_to_str", Semantic_types.FunctionSymbol ([TBoolean], TString));
+    (* ("func_to_str", Semantic_types.FunctionSymbol ([TFunction], TString)); *)
+    ("input", Semantic_types.FunctionSymbol ([TString], TString))
 ]
