@@ -22,7 +22,7 @@ open Exceptions
     assignment = logic_or [ "=" assignment ]
     expr = assignment
     block = "{" ( statement )* "}"
-    if = "if" expr block [ "else" block ]
+    if = "if" expr block ( "else" "if" expr block )* [ "else" block ]
     for_initializer = [ assignment | declaration ]
     for_condition = [ expr ]
     for_increment = [ expr ]
@@ -499,19 +499,33 @@ and parse_block parser =
 
 
 (*
-    if = "if" expr "then" block [ "else" block ]
+    if = "if" expr block ( "else" "if" expr block )* [ "else" block ]
 *)
 and parse_if parser =
+    let rec loop (): block option =
+        match peek parser with
+        | Some Else -> ignore (advance parser);
+            begin match peek parser with
+            | Some If ->
+                let position = get_token_pos parser in
+                ignore (advance parser);
+                let expr = parse_expr parser in
+                let body = parse_block parser in
+                Some [{ kind = IfStmt (expr, body, loop ()); pos = position}]
+            (* else body *)
+            | Some _ -> Some (parse_block parser)
+            | None -> failwith "End of input?"
+            end
+        (* no more else or else if *)
+        | Some x -> None
+        | None -> failwith "End of input"
+    in
+
     let position = get_token_pos parser in
     expect parser If "Expected start of 'if'";
     let expr = parse_expr parser in
     let then_body = parse_block parser in
-    match peek parser with
-        | Some Else -> ignore (advance parser);
-            let else_body = parse_block parser in
-            { kind = IfStmt (expr, then_body, Some else_body); pos = position }
-
-        | _ -> { kind = IfStmt (expr, then_body, None); pos = position }
+    { kind = IfStmt (expr, then_body, loop ()); pos = position }
 
 (*
     for_initializer = [ assignment | declaration | implicit_declaration ]

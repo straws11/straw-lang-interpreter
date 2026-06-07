@@ -1,0 +1,9 @@
+let num = 1001
+
+if num < 100 {
+print ("sub 100")
+} else if num == 100 {
+print("exactly 100")
+} else {
+print("greater than 100")
+}
