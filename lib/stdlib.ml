@@ -8,13 +8,14 @@ let rec val_to_str v = match v with
     | VFloat x -> string_of_float x
     | VArray x -> "[" ^ (String.concat ", " (Array.to_list (Array.map val_to_str x))) ^ "]"
     | VFunction x -> begin match x with
-        | UserFunction (params, return, _body) ->
+        | UserFunction (params, return, _body, env) ->
             "fn ("
             ^ (String.concat ", " (List.map
                 (fun (dt, name) -> Ast.string_of_data_type dt ^ " " ^ name)
             params))
             ^ ")"
             ^ " -> " ^ Ast.string_of_data_type return
+            ^ string_of_env env
 
         | BuiltinFunction x -> "Stdlib function"
         end

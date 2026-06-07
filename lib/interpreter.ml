@@ -11,7 +11,7 @@ let rec v_type_to_t_type v_var = match v_var with
     | VString _ -> TString
     (* BUG: this next line is probably wrong, what if array is empty *)
     | VArray vals -> TArray (v_type_to_t_type vals.(0))
-    | VFunction UserFunction (params, ret, _block) ->
+    | VFunction UserFunction (params, ret, _block, _env) ->
         let param_dts = List.map (fun p -> fst p) params in
         TFunction (param_dts, ret)
     | VFunction BuiltinFunction f -> raise (Runtime_error "unable to can")
@@ -28,7 +28,7 @@ let rec value_has_right_type env v t =
     | VBoolean _, TBoolean -> true
     | VString _, TString -> true
     | VArray x, TArray dt -> value_has_right_type env x.(0) dt
-    | VFunction UserFunction (params, ret, _block), TFunction (dts, r) ->
+    | VFunction UserFunction (params, ret, _block, _env), TFunction (dts, r) ->
         let contents = List.map2
             Semantic.types_match
             (ret :: (List.map fst params))
@@ -66,13 +66,13 @@ let rec apply_function env (func: function_value) (args: value list) =
         | h :: t -> interpret_statement env h; loop env t
         | [] -> ()
     in
-    let func_scope: environment = { outer = Some env; tbl = Hashtbl.create 11 } in
     begin match func with
-        | UserFunction (params, _ret, _body) -> insert_params func_scope params args;
-        | BuiltinFunction _f -> ();
-    end;
-    match func with
-        | UserFunction (_params, _ret, body) ->
+        | UserFunction (params, _ret, body, closure_env) ->
+            let func_scope: environment = {
+                outer = Some closure_env;
+                tbl = Hashtbl.create 11
+            } in
+            insert_params func_scope params args;
             begin try
                 loop func_scope body;
                 VUnit
@@ -80,6 +80,7 @@ let rec apply_function env (func: function_value) (args: value list) =
                 | Return_exception v -> v
             end
         | BuiltinFunction f -> f args
+    end
 
 and interpret_while env expr body =
     let rec run_loop () =
@@ -253,7 +254,7 @@ and interpret_expr env (expr: Ast.expr)  = match expr.kind with
         interpret_assignment env expr1 expr2
 
     | FunExpr (parameter_list, data_type, body) ->
-        let fun_val = UserFunction (parameter_list, data_type, body) in
+        let fun_val = UserFunction (parameter_list, data_type, body, env) in
         VFunction fun_val
 
     | StructExpr (name, ht) ->
@@ -396,7 +397,7 @@ and interpret_statement env (stmt: Ast.statement) = match stmt.kind with
             end
 
     | FunDeclStmt (name, parameter_list, data_type, body) ->
-        let fun_val = UserFunction (parameter_list, data_type, body) in
+        let fun_val = UserFunction (parameter_list, data_type, body, env) in
         insert env name (VFunction fun_val);
 
     | StructDeclStmt (type_name, members_ht) -> ()
@@ -425,14 +426,14 @@ and interpret_block env (ast: block): unit =
 
 and collect_statement env (stmt: Ast.statement) = match stmt.kind with
     | VarDeclStmt (_, name, Some { kind = FunExpr (params, return_op, body); _ }) ->
-        let func_val = UserFunction (params, return_op, body) in
+        let func_val = UserFunction (params, return_op, body, env) in
         insert env name (VFunction func_val)
 
     | VarDeclStmt (dt, name, _expr_op) ->
         insert_empty env name (* insert that the var exists but ignore its type, we will deal later*)
 
     | FunDeclStmt (name, params, return_op, body) ->
-            let func_val = UserFunction (params, return_op, body) in
+            let func_val = UserFunction (params, return_op, body, env) in
             insert env name (VFunction func_val)
 
     | StructDeclStmt (type_name, ht) -> ()

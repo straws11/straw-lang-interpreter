@@ -10,3 +10,7 @@ func make_counter() -> fn() -> int {
 let counter = make_counter()
 
 print(int_to_str(counter()))
+print(int_to_str(counter()))
+print(int_to_str(counter()))
+print(int_to_str(counter()))
+print(int_to_str(counter()))

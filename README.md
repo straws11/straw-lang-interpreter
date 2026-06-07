@@ -14,3 +14,4 @@ Interpreter for StrawLang written in OCaml
 - [ ] Else-if support
 - [ ] Allow closures
 - [x] stdlib for type conversion
+- [ ] Closures to only capture relevant information about environment
