@@ -17,6 +17,7 @@ let rec v_type_to_t_type v_var = match v_var with
     | VFunction BuiltinFunction f -> raise (Runtime_error "unable to can")
     (* BUG: this next line is wrong *)
     | VStruct _ -> TStruct "blahblah"
+    | VEnumMember (name, mem_name) -> TEnum name
     | VUnit -> failwith "Impossible"
 
 let rec value_has_right_type env v t =
@@ -41,6 +42,8 @@ let rec value_has_right_type env v t =
         (* | Some  *)
         (*     struct_fields_match x y *)
         (* end *)
+    | VEnumMember (name, memb), TEnum type_name -> name = type_name
+    | _, TImplicit -> failwith "Shouldn't allow implicit variables here!"
     | _ -> false
 
 let types_match t1 t2 = match t1, t2 with
@@ -182,6 +185,7 @@ and interpret_expr env (expr: Ast.expr)  = match expr.kind with
     | BoolLit x -> VBoolean x
     | StrLit x -> VString x
     | FormattedStringLit (_, _) -> interpret_f_string env expr
+    | EnumLit (name, mem_name) -> VEnumMember (name, mem_name)
     | ArrayContent x -> VArray (Array.map (interpret_expr env) x)
 
     | Variable x -> begin match lookup env x with
@@ -402,11 +406,14 @@ and interpret_statement env (stmt: Ast.statement) = match stmt.kind with
 
     | StructDeclStmt (type_name, members_ht) -> ()
 
-        (* TODO: don't think this one is right *)
-    | ExprStmt expr -> ignore (interpret_expr env expr);
-
     (* TODO: this is where the env stuff is necessary too *)
     | BlockStmt body -> interpret_block env body
+
+    | EnumDeclStmt (name, members) -> ()
+
+    (* TODO: don't think this one is right *)
+    | ExprStmt expr -> ignore (interpret_expr env expr);
+
 
 and interpret_block env (ast: block): unit =
     let rec loop scope rem = match rem with
@@ -437,6 +444,8 @@ and collect_statement env (stmt: Ast.statement) = match stmt.kind with
             insert env name (VFunction func_val)
 
     | StructDeclStmt (type_name, ht) -> ()
+
+    | EnumDeclStmt (name, members) -> ()
 
     | _ -> ()
 

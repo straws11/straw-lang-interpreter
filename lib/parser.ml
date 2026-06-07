@@ -10,7 +10,10 @@ open Exceptions
     struct_decl = "struct" IDENTIFIER "{" data_type IDENTIFIER ( "," data_type IDENTIFIER )* "}"
     array_content = "[" [ expr ( "," expr )* ]"]"
     struct_expr = IDENTIFIER "{" [ IDENTIFIER "=" expr ( "," IDENTIFIER "=" expr )* ] "}"
-    primary = INTEGER | FLOAT | STRING | FORMATTED_STRING | BOOLEAN | IDENTIFIER | array_content | function_expr | struct_expr | "(" expr ")"
+    primary = ( INTEGER | FLOAT | STRING | FORMATTED_STRING | BOOLEAN
+            | IDENTIFIER | array_content | function_expr | struct_expr
+            | "(" expr ")"
+        )
     expr_list = expr ( "," expr )*
     postfix = primary ( "(" expr_list ")" | "[" expr "]" | "." IDENTIFIER )* [ "++" | "--" ]
     unary = ( "!" | "-" ) unary | postfix
@@ -21,6 +24,7 @@ open Exceptions
     logic_or = logic_and ( "or" logic_and )*
     assignment = logic_or [ "=" assignment ]
     expr = assignment
+    enum_decl = "enum" IDENTIFIER "{" IDENTIFIER ( "," IDENTIFIER )* "}"
     block = "{" ( statement )* "}"
     if = "if" expr block ( "else" "if" expr block )* [ "else" block ]
     for_initializer = [ assignment | declaration ]
@@ -34,7 +38,10 @@ open Exceptions
     data_type = ( builtin_data_type | IDENTIFIER ) ( [ "[" "]" ] )*
     implicit_declaration = "let" IDENTIFIER "=" expr
     declaration = data_type IDENTIFIER [ "=" expr ]
-    statement = ( if | for | while | return | declaration | implicit_declaration | function_decl | struct_decl | expr_stmt )
+    statement = ( if | for | while | return | declaration
+                | implicit_declaration | function_decl | struct_decl
+                | enum_decl | expr_stmt
+            )
     body = ( statement )*
 *)
 
@@ -132,7 +139,7 @@ let starts_primary tok = match tok with
 
 let starts_data_type parser = match peek parser with
     | Some Int | Some Float | Some Str | Some Bool | Some Fn | Some Let -> true
-    (* struct var decl starts with 2 identifiers, the type then name OR identifier then '[' for array *)
+    (* struct and enum var decl starts with 2 identifiers, the type then name OR identifier then '[' for array *)
     | Some Identifier _ ->
         begin match peek_next parser with
             | Some Identifier _ | Some LBrack -> true
@@ -278,7 +285,9 @@ and parse_primary parser =
             | FloatPoint x -> FloatLit x
             | Boolean x -> BoolLit x
             | Identifier x -> begin match peek parser with
-                | Some LBrace -> ignore (retreat parser); parse_struct_expr parser
+                | Some LBrace ->
+                    ignore (retreat parser);
+                    parse_struct_expr parser
                 | _ -> Variable x
                 end
             | LBrack -> parse_array_content parser
@@ -346,10 +355,7 @@ and parse_postfix_tail parser inner =
         | Some Dot ->
                 let position = get_token_pos parser in
                 let id = ignore (advance parser); expect_id parser in
-                if (id = "length") then
-                    {kind = ArrayLength inner; pos = position}
-                else
-                    parse_postfix_tail parser ({ kind = StructAccess (inner, id); pos = position })
+                parse_postfix_tail parser ({ kind = FieldAccess (inner, id); pos = position })
         | _ -> inner
 
 (*
@@ -478,6 +484,27 @@ and parse_assignment parser: Ast.expr =
     expr = assignment
 *)
 and parse_expr parser = parse_assignment parser
+
+
+(*
+    enum_decl = "enum" IDENTIFIER "{" IDENTIFIER ( "," IDENTIFIER )* "}"
+*)
+and parse_enum_decl parser =
+    let rec loop acc = match peek parser with
+        | Some Comma ->
+            ignore (advance parser);
+            loop (expect_id parser :: acc)
+        | _ -> List.rev acc
+    in
+
+    let position = get_token_pos parser in
+    expect parser Enum "shouldn't happen";
+    let enum_type_name = expect_id parser in
+    expect parser LBrace "Expected '{' for enum declaration";
+    let id = expect_id parser in
+    let members = loop [id] in
+    expect parser RBrace "Expected '}' for enum declaration close";
+    { kind = EnumDeclStmt (enum_type_name, members); pos = position }
 
 (*
     block = "{" ( statement )* "}"
@@ -743,7 +770,7 @@ and parse_declaration parser =
     { kind = VarDeclStmt (data_type, id, init); pos = position }
 
 (*
-    statement = ( if | for | while | return | declaration | implicit_declaration | function_decl | struct_decl | expr_stmt )
+    statement = ( if | for | while | return | declaration | implicit_declaration | function_decl | struct_decl | enum_decl | expr_stmt )
  *)
 and parse_statement parser = match peek parser with
     | Some If -> parse_if parser
@@ -753,6 +780,7 @@ and parse_statement parser = match peek parser with
     | Some Func -> parse_function_decl parser
     | Some Struct -> parse_struct_decl parser
     | Some Let -> parse_implicit_declaration parser
+    | Some Enum -> parse_enum_decl parser
     | Some _ when starts_data_type parser -> parse_declaration parser
     | Some x when starts_expr parser -> {
             kind = ExprStmt (parse_expr parser); pos = get_token_pos parser

@@ -43,6 +43,7 @@ let rec str_of_dt dt =
         | Ast.TUnit -> "unit"
         | Ast.TImplicit -> "implicit, idk if this should ever display lol"
         | Ast.TStruct name -> name ^ " (struct)"
+        | Ast.TEnum name -> name ^ " (enum)"
 
 let create_new_scope outer_scope = { outer = outer_scope; tbl = Hashtbl.create 11 }
 
@@ -75,6 +76,7 @@ and get_var_type st var: (Ast.data_type option) = match lookup_st st var with
     | Some FunctionSymbol (param_dts, return_dt) ->
         Some (TFunction (param_dts, return_dt))
     | Some StructSymbol _ -> Some (Ast.TStruct var)
+    | Some EnumSymbol _ -> Some (Ast.TEnum var)
     | None -> None
 
 and type_check_struct_expression st (exp: Ast.expr) =
@@ -146,7 +148,7 @@ and type_check_binary st (binary: Ast.expr) =
                         | _ -> raise (Type_invalid_operator_error (Ast.string_of_binary_op op, str_of_dt t1, str_of_dt t2, binary.pos))
                     end
 
-                | TFunction (_, _) | TStruct _ ->
+                | TFunction (_, _) | TStruct _ | TEnum _ ->
                     raise (Type_invalid_operator_error (Ast.string_of_binary_op op, str_of_dt t1, str_of_dt t2, binary.pos))
 
                 | TImplicit -> failwith "Shouldn't happen"
@@ -278,8 +280,9 @@ and type_check_assignment st (exp: Ast.expr) = match exp.kind with
 
 and type_check_struct_access st (exp: Ast.expr) =
     match exp.kind with
-    | StructAccess (expr, id) ->
+    | FieldAccess (expr, id) ->
         let type_name =
+            (* TODO: this is redundant i already have it*)
             begin match type_check_expr st expr with
                 | TStruct x -> x
                 | x -> raise (Type_mismatch_error (str_of_dt x, "a struct type", expr.pos))
@@ -297,11 +300,57 @@ and type_check_struct_access st (exp: Ast.expr) =
 
     | _ -> failwith "Impossible"
 
+and type_check_enum_literal st (expr: Ast.expr) =
+    match expr.kind with
+    | EnumLit (name, mem_name) ->
+        begin match lookup_st st name with
+        | Some EnumSymbol enum_members ->
+            begin match List.find_opt (fun x -> x = mem_name) enum_members with
+                | Some _ -> Ast.TEnum name
+                | None -> raise (Type_custom_error (
+                    "Enum member " ^ mem_name ^ " doesn't exist on type " ^ name
+                    , expr.pos))
+            end
+        | Some x -> begin match get_var_type st name with
+                | Some vt -> raise (Type_mismatch_error (str_of_dt vt, str_of_dt (Ast.TEnum name), expr.pos))
+                | None -> raise (Type_undeclared_error (mem_name, expr.pos))
+                end
+        | None -> raise (Type_undeclared_error (mem_name, expr.pos))
+        end
+    | _ -> failwith "Impossible"
+
+and type_check_enum_access st (expr: Ast.expr) =
+    match expr.kind with
+    | FieldAccess (expr, id) ->
+        let type_name =
+            begin match type_check_expr st expr with
+                | TEnum x -> x
+                | x -> raise (Type_mismatch_error (str_of_dt x, "an enum type", expr.pos))
+            end
+        in
+        let enum_members = match lookup_st st type_name with
+            | Some EnumSymbol members -> members
+            | Some x -> raise (Type_custom_error ("Not an enum type", expr.pos))
+            | _ -> raise (Type_custom_error ("Enum type doesn't exist", expr.pos))
+        in
+        begin match List.find_opt (fun x -> x = id) enum_members with
+            (* TODO: check this logic *)
+            | Some _ -> Ast.TEnum type_name
+            | None -> parsi
+        end
+        begin match Hashtbl.find_opt fields_ht id with
+            | Some dt -> dt
+            | None -> raise (Type_custom_error ("Field " ^ id ^ " doesn't exist on type " ^ type_name, exp.pos))
+        end
+
+    | _ -> failwith "Impossible"
+
 and type_check_expr st (exp: Ast.expr) = match exp.kind with
     | IntLit x -> Ast.TInteger
     | FloatLit x -> Ast.TFloat
     | BoolLit x -> Ast.TBoolean
     | StrLit x -> Ast.TString
+    | EnumLit (_, _) -> type_check_enum_literal st exp
     | FormattedStringLit (segments, vars) -> List.iter (fun x -> match type_check_expr st x with
             | TString -> ()
             | y -> raise (Type_mismatch_error (str_of_dt y, str_of_dt TString, x.pos))
@@ -329,12 +378,11 @@ and type_check_expr st (exp: Ast.expr) = match exp.kind with
                 | x, _ -> raise (Type_custom_error ("Cannot index into value of type " ^ str_of_dt x, exp1.pos))
             end
 
-    | StructAccess (expr, id) -> type_check_struct_access st exp
-
-    | ArrayLength e ->
-        begin match type_check_expr st e with
-            | TArray _ -> TInteger
-                | _ -> raise (Type_custom_error ("Length can only be invoked on type array", exp.pos))
+    | FieldAccess (expr, id) ->
+        begin match type_check_expr st expr with
+            | Ast.TStruct _name -> type_check_struct_access st exp
+            | Ast.TEnum _name -> type_check_enum_access st exp
+            | Ast.TArray dt -> dt (* TODO: double check this one *)
         end
 
     | PostfixInc e | PostfixDec e ->
@@ -379,15 +427,6 @@ and type_check_statement st (cur_ret_type: Ast.data_type) (stmt: Ast.statement) 
 
     | ReturnStmt _ -> ignore (type_check_return st cur_ret_type stmt);
 
-(*
-    let a = 5
-    int a = 5
-    int a
-    let b = func (int, int) -> bool {}
-    fn(int) -> bool mything = func (int) -> bool {}
-    fn(int) -> bool mything
-    let c // INVALID
-*)
     | VarDeclStmt (dt, name, exp_op) ->
         begin match exp_op with
             | Some e ->
@@ -417,9 +456,11 @@ and type_check_statement st (cur_ret_type: Ast.data_type) (stmt: Ast.statement) 
 
     | StructDeclStmt (name, ht) -> print_endline "Struct doesn't have type check??";
 
-    | ExprStmt exp -> ignore (type_check_expr st exp);
+    | EnumDeclStmt (name, members) -> ()
 
     | BlockStmt body -> ignore (type_check_block st cur_ret_type body);
+
+    | ExprStmt exp -> ignore (type_check_expr st exp);
 
 and type_check_statement_list st ret_type stmts =
     let rec loop scope lst = match lst with
@@ -472,6 +513,9 @@ and collect_statement sym_tbl (stmt: Ast.statement) = match stmt.kind with
     | StructDeclStmt (name, ht) ->
             let members = Hashtbl.copy ht in
             insert_st sym_tbl name (StructSymbol members)
+
+    | EnumDeclStmt (name, members) ->
+        insert_st sym_tbl name (EnumSymbol members)
 
     | _ -> ()
 

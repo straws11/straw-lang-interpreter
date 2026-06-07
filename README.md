@@ -11,7 +11,7 @@ Interpreter for StrawLang written in OCaml
 - [ ] Enum
 - [ ] match statement
 - [ ] allow single statement blocks for for/while/if
-- [ ] Else-if support
-- [ ] Allow closures
+- [x] Else-if support
+- [x] Allow closures
 - [x] stdlib for type conversion
 - [ ] Closures to only capture relevant information about environment

@@ -22,7 +22,7 @@ let rec val_to_str v = match v with
     | VStruct x -> "{" ^ String.concat ", " (
         Hashtbl.to_seq x |> Seq.map (fun (k, v) -> k ^ " = " ^ val_to_str v) |> List.of_seq
         ) ^ "}"
-    | VUnit -> ""
+    | VEnumMember (_, _) | VUnit -> ""
 
 let print_fn params =
     begin match params with

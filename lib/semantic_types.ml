@@ -2,6 +2,7 @@ type symbol =
     | VariableSymbol of Ast.data_type
     | FunctionSymbol of Ast.data_type list * Ast.data_type
     | StructSymbol of (string, Ast.data_type) Hashtbl.t
+    | EnumSymbol of string list
 
 type symbol_table = (string, symbol) Hashtbl.t
 
@@ -17,6 +18,7 @@ let string_of_symbol sym = match sym with
         ^ "],"
         ^ Ast.string_of_data_type dt
         ^ ")"
+
     | StructSymbol members -> "StructSymbol("
         ^ String.concat ", " (
             Hashtbl.to_seq members
@@ -24,6 +26,8 @@ let string_of_symbol sym = match sym with
             |> List.of_seq
         )
         ^ ")"
+
+    | EnumSymbol members -> "EnumSymbol(" ^ String.concat ", " members ^ ")"
 
 let insert_st cur_scope key value = Hashtbl.replace cur_scope.tbl key value
 

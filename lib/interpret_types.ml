@@ -11,6 +11,7 @@ and value =
     | VArray of value array
     | VFunction of function_value
     | VStruct of (string, value) Hashtbl.t
+    | VEnumMember of string * string
     | VUnit
 
 and environment = {
@@ -82,6 +83,7 @@ and string_of_value v = match v with
             |> Seq.map (fun (name, v) -> name ^ "=" ^ string_of_value v)
             |> List.of_seq
         ) ^ "}"
+    | VEnumMember (name, member_name) -> name ^ "." ^ member_name
     | VUnit -> "unit value"
 
 and string_of_value_option v = match v with

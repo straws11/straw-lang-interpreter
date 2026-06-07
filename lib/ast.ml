@@ -26,6 +26,7 @@ type data_type =
     | TArray of data_type
     | TFunction of data_type list * data_type
     | TStruct of string
+    | TEnum of string
     | TImplicit (* this one shouldn't exist after semantic analysis *)
     | TUnit
 
@@ -34,6 +35,7 @@ and expr_kind =
     | IntLit of int
     | BoolLit of bool
     | StrLit of string
+    | EnumLit of string * string
     | FormattedStringLit of string list * expr list
     | ArrayContent of expr array
     | StructExpr of string * (string, expr) Hashtbl.t
@@ -41,8 +43,7 @@ and expr_kind =
     | Variable of string
     | Call of expr * expr list
     | Index of expr * expr
-    | StructAccess of expr * string
-    | ArrayLength of expr
+    | FieldAccess of expr * string
 
     | PostfixInc of expr
     | PostfixDec of expr
@@ -66,6 +67,7 @@ and statement_kind =
     | StructDeclStmt of string * (string, data_type) Hashtbl.t
     | ExprStmt of expr (* example foo(1,2) or print(x) are expressions but they are used as statements ofc *)
     | BlockStmt of block
+    | EnumDeclStmt of string * string list
 
 and expr = {
     kind: expr_kind;
@@ -98,6 +100,7 @@ let rec string_of_data_type dt = match dt with
     | TString -> "TString"
     | TArray d -> "TArray of " ^ string_of_data_type d
     | TStruct name -> "TStruct of " ^ name
+    | TEnum name -> "TEnum of " ^ name
     | TFunction (dts, return) -> "TFunction("
         ^ String.concat ", " (List.map string_of_data_type dts)
         ^ ") -> " ^ string_of_data_type return
@@ -140,6 +143,8 @@ and string_of_expr depth expr =
     | FloatLit x -> line depth ("FloatLit(" ^ string_of_float x ^ ")")
     | BoolLit x -> line depth ("BoolLit(" ^ string_of_bool x ^ ")")
     | StrLit x -> line depth ("StrLit(" ^ x ^ ")")
+    | EnumLit (enum_name, member_name) ->
+        line depth ("EnumLit(" ^ enum_name ^ "." ^ member_name ^ ")")
     | FormattedStringLit (segments, vars) ->
             block depth [
                 line depth "FStringLit(";
@@ -189,19 +194,12 @@ and string_of_expr depth expr =
             line depth ")"
         ]
 
-    | StructAccess (e, id) ->
+    | FieldAccess (e, id) ->
         block depth [
-            line depth "StructAccess(";
+            line depth "FieldAccess(";
             string_of_expr (depth + 1) e;
             line depth id;
             line depth ")"
-        ]
-
-    | ArrayLength e ->
-        block depth [
-            line depth "ArrayLength(";
-            string_of_expr (depth + 1) e;
-            line depth ")";
         ]
 
     | PostfixInc e ->
@@ -355,3 +353,13 @@ and string_of_statement depth stmt =
 
     | BlockStmt b ->
         string_of_block depth b
+
+    | EnumDeclStmt (name, members) ->
+        block depth ([
+            line depth ("EnumDecl(" ^ name);
+        ]
+        @
+            List.map (line depth) members
+        @
+        [line depth ")"]
+        )

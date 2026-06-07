@@ -44,6 +44,7 @@ type token_kind =
     | And
     | Fn
     | For
+    | While
     | If
     | Else
     | Or
@@ -55,7 +56,7 @@ type token_kind =
     | Func
     | Let
     | Struct
-    | While
+    | Enum
 
     | EOF
 
@@ -104,6 +105,7 @@ let rec string_of_token token_type = match token_type with
     | And -> "And"
     | Fn -> "Fn"
     | For -> "For"
+    | While -> "While"
     | If -> "If"
     | Else -> "Else"
     | Or -> "Or"
@@ -115,7 +117,7 @@ let rec string_of_token token_type = match token_type with
     | Func -> "Func"
     | Let -> "Let"
     | Struct -> "Struct"
-    | While -> "While"
+    | Enum -> "Enum"
     | EOF -> "EOF"
 
 let string_of_token_list token_list =
@@ -126,6 +128,7 @@ let reserved_words = StringMap.of_seq @@ List.to_seq [
     ("and", And);
     ("fn", Fn);
     ("for", For);
+    ("while", While);
     ("if", If);
     ("else", Else);
     ("or", Or);
@@ -137,5 +140,5 @@ let reserved_words = StringMap.of_seq @@ List.to_seq [
     ("func", Func);
     ("let", Let);
     ("struct", Struct);
-    ("while", While);
+    ("enum", Enum);
 ]
