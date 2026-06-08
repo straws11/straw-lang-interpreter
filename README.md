@@ -15,3 +15,4 @@ Interpreter for StrawLang written in OCaml
 - [x] Allow closures
 - [x] stdlib for type conversion
 - [ ] Closures to only capture relevant information about environment
+- [ ] More array operations, currently messy

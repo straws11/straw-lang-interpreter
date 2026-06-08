@@ -35,7 +35,7 @@ and expr_kind =
     | IntLit of int
     | BoolLit of bool
     | StrLit of string
-    | EnumLit of string * string
+    (* | EnumLit of string * string *)
     | FormattedStringLit of string list * expr list
     | ArrayContent of expr array
     | StructExpr of string * (string, expr) Hashtbl.t
@@ -143,8 +143,8 @@ and string_of_expr depth expr =
     | FloatLit x -> line depth ("FloatLit(" ^ string_of_float x ^ ")")
     | BoolLit x -> line depth ("BoolLit(" ^ string_of_bool x ^ ")")
     | StrLit x -> line depth ("StrLit(" ^ x ^ ")")
-    | EnumLit (enum_name, member_name) ->
-        line depth ("EnumLit(" ^ enum_name ^ "." ^ member_name ^ ")")
+    (* | EnumLit (enum_name, member_name) -> *)
+    (*     line depth ("EnumLit(" ^ enum_name ^ "." ^ member_name ^ ")") *)
     | FormattedStringLit (segments, vars) ->
             block depth [
                 line depth "FStringLit(";

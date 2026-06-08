@@ -300,24 +300,24 @@ and type_check_struct_access st (exp: Ast.expr) =
 
     | _ -> failwith "Impossible"
 
-and type_check_enum_literal st (expr: Ast.expr) =
-    match expr.kind with
-    | EnumLit (name, mem_name) ->
-        begin match lookup_st st name with
-        | Some EnumSymbol enum_members ->
-            begin match List.find_opt (fun x -> x = mem_name) enum_members with
-                | Some _ -> Ast.TEnum name
-                | None -> raise (Type_custom_error (
-                    "Enum member " ^ mem_name ^ " doesn't exist on type " ^ name
-                    , expr.pos))
-            end
-        | Some x -> begin match get_var_type st name with
-                | Some vt -> raise (Type_mismatch_error (str_of_dt vt, str_of_dt (Ast.TEnum name), expr.pos))
-                | None -> raise (Type_undeclared_error (mem_name, expr.pos))
-                end
-        | None -> raise (Type_undeclared_error (mem_name, expr.pos))
-        end
-    | _ -> failwith "Impossible"
+(* and type_check_enum_literal st (expr: Ast.expr) = *)
+(*     match expr.kind with *)
+(*     | EnumLit (name, mem_name) -> *)
+(*         begin match lookup_st st name with *)
+(*         | Some EnumSymbol enum_members -> *)
+(*             begin match List.find_opt (fun x -> x = mem_name) enum_members with *)
+(*                 | Some _ -> Ast.TEnum name *)
+(*                 | None -> raise (Type_custom_error ( *)
+(*                     "Enum member " ^ mem_name ^ " doesn't exist on type " ^ name *)
+(*                     , expr.pos)) *)
+(*             end *)
+(*         | Some x -> begin match get_var_type st name with *)
+(*                 | Some vt -> raise (Type_mismatch_error (str_of_dt vt, str_of_dt (Ast.TEnum name), expr.pos)) *)
+(*                 | None -> raise (Type_undeclared_error (mem_name, expr.pos)) *)
+(*                 end *)
+(*         | None -> raise (Type_undeclared_error (mem_name, expr.pos)) *)
+(*         end *)
+(*     | _ -> failwith "Impossible" *)
 
 and type_check_enum_access st (expr: Ast.expr) =
     match expr.kind with
@@ -336,11 +336,7 @@ and type_check_enum_access st (expr: Ast.expr) =
         begin match List.find_opt (fun x -> x = id) enum_members with
             (* TODO: check this logic *)
             | Some _ -> Ast.TEnum type_name
-            | None -> parsi
-        end
-        begin match Hashtbl.find_opt fields_ht id with
-            | Some dt -> dt
-            | None -> raise (Type_custom_error ("Field " ^ id ^ " doesn't exist on type " ^ type_name, exp.pos))
+            | None -> raise (Type_custom_error ("Field " ^ id ^ " doesn't exist on type " ^ type_name, expr.pos))
         end
 
     | _ -> failwith "Impossible"
@@ -350,7 +346,7 @@ and type_check_expr st (exp: Ast.expr) = match exp.kind with
     | FloatLit x -> Ast.TFloat
     | BoolLit x -> Ast.TBoolean
     | StrLit x -> Ast.TString
-    | EnumLit (_, _) -> type_check_enum_literal st exp
+    (* | EnumLit (_, _) -> type_check_enum_literal st exp *)
     | FormattedStringLit (segments, vars) -> List.iter (fun x -> match type_check_expr st x with
             | TString -> ()
             | y -> raise (Type_mismatch_error (str_of_dt y, str_of_dt TString, x.pos))
@@ -382,7 +378,12 @@ and type_check_expr st (exp: Ast.expr) = match exp.kind with
         begin match type_check_expr st expr with
             | Ast.TStruct _name -> type_check_struct_access st exp
             | Ast.TEnum _name -> type_check_enum_access st exp
-            | Ast.TArray dt -> dt (* TODO: double check this one *)
+            | Ast.TArray dt ->
+                if id = "length" then
+                    Ast.TInteger
+                else
+                    raise (Type_custom_error ("Cannot perform field access on array", expr.pos))
+            | x -> raise (Type_custom_error ("Cannot perform field access on type " ^ str_of_dt x, expr.pos))
         end
 
     | PostfixInc e | PostfixDec e ->

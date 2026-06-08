@@ -185,7 +185,7 @@ and interpret_expr env (expr: Ast.expr)  = match expr.kind with
     | BoolLit x -> VBoolean x
     | StrLit x -> VString x
     | FormattedStringLit (_, _) -> interpret_f_string env expr
-    | EnumLit (name, mem_name) -> VEnumMember (name, mem_name)
+    (* | EnumLit (name, mem_name) -> VEnumMember (name, mem_name) *)
     | ArrayContent x -> VArray (Array.map (interpret_expr env) x)
 
     | Variable x -> begin match lookup env x with
@@ -207,7 +207,14 @@ and interpret_expr env (expr: Ast.expr)  = match expr.kind with
             let idx = interpret_expr env exp2 in
             interpret_index env var idx
 
-    | StructAccess (_, _) -> interpret_struct_access env expr
+    | FieldAccess (expr, id) ->
+        begin match expr.kind with
+            | Variable name when enum_exists
+        end
+        begin match interpret_expr env expr with
+        | VStruct _ -> interpret_struct_access env expr
+        | VEnumMember (type_name, member_name)
+        end
 
     | ArrayLength e ->
         let arr = interpret_expr env e in
