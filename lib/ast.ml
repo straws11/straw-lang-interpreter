@@ -69,6 +69,7 @@ and statement_kind =
     | StructDeclStmt of string * (string, data_type) Hashtbl.t
     | ExprStmt of expr (* example foo(1,2) or print(x) are expressions but they are used as statements ofc *)
     | BlockStmt of block
+    | ImportStmt of string
     | EnumDeclStmt of string * string list
 
 and expr = {

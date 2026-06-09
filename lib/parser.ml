@@ -11,9 +11,10 @@ open Dbg_prints
     struct_decl = "struct" IDENTIFIER "{" data_type IDENTIFIER ( "," data_type IDENTIFIER )* "}"
     array_content = "[" [ expr ( "," expr )* ]"]"
     struct_expr = IDENTIFIER "{" [ IDENTIFIER "=" expr ( "," IDENTIFIER "=" expr )* ] "}"
+    array_initializer = data_type "[" expr "]"
     primary = ( INTEGER | FLOAT | STRING | FORMATTED_STRING | BOOLEAN | CHARACTER
             | IDENTIFIER | array_content | function_expr | struct_expr
-            | "(" expr ")"
+            | "(" expr ")" | array_initializer
         )
     expr_list = expr ( "," expr )*
     postfix = primary ( "(" expr_list ")" | "[" expr "]" | "." IDENTIFIER )* [ "++" | "--" ]
@@ -39,9 +40,10 @@ open Dbg_prints
     data_type = ( builtin_data_type | IDENTIFIER ) ( [ "[" "]" ] )*
     implicit_declaration = "let" IDENTIFIER "=" expr
     declaration = data_type IDENTIFIER [ "=" expr ]
+    import_stmt = "import" STRING
     statement = ( if | for | while | return | declaration
                 | implicit_declaration | function_decl | struct_decl
-                | enum_decl | expr_stmt
+                | enum_decl | import_stmt | expr_stmt
             )
     body = ( statement )*
 *)
@@ -104,6 +106,7 @@ let str_of_tok tok = match tok with
     | Let -> "let"
     | Struct -> "struct"
     | Enum -> "enum"
+    | Import -> "import"
     | EOF -> "eof"
 
 
@@ -322,14 +325,17 @@ and parse_struct_expr parser =
     expect parser RBrace "Expected '}' for struct instantiation end";
     let ht = Hashtbl.of_seq (List.to_seq content) in
     StructExpr (name, ht)
+(*
+    array_initializer = data_type "[" expr "]"
+*)
+and parse_array_initializer parser =()
 
 (*
-    primary = INTEGER | FLOAT | STRING | FORMATTED_STRING | BOOLEAN | CHARACTER | IDENTIFIER | array_content | function_expr | struct_expr | "(" expr ")"
+    primary = INTEGER | FLOAT | STRING | FORMATTED_STRING | BOOLEAN | CHARACTER | IDENTIFIER | array_content | function_expr | struct_expr | "(" expr ")" | data_type "[" expr "]"
 *)
 and parse_primary parser =
     match peek parser with
         | Some Func -> parse_function_expr parser
-        | Some tok ->
             let position = get_token_pos parser in
             ignore (advance parser);
             { kind = begin match tok with
@@ -343,6 +349,9 @@ and parse_primary parser =
                 | Some LBrace ->
                     ignore (retreat parser);
                     parse_struct_expr parser
+                | Some LBrack ->
+                    ignore (retreat parser);
+                    parse_array_initializer parser
                 | _ -> Variable x
                 end
             | LBrack -> parse_array_content parser
@@ -351,6 +360,7 @@ and parse_primary parser =
                 expect parser RParen "Expected ')' after expression";
                 Group expr
 
+            | Int | Float | Char | Str | Bool ->  
             | x -> raise (Parse_error ("Expected literal or variable, found " ^ str_of_tok x,
                     get_token_pos parser))
             end;
@@ -823,8 +833,15 @@ and parse_declaration parser =
 
     { kind = VarDeclStmt (data_type, id, init); pos = position }
 
+and parse_import parser =
+    let position = get_token_pos parser in
+    expect parser Import "Impossible";
+    match peek parser with
+        | Some String s -> ignore (advance parser); { kind = ImportStmt s; pos = position }
+        | _ -> raise (Parse_error ("Expected module name for import", get_token_pos parser))
+
 (*
-    statement = ( if | for | while | return | declaration | implicit_declaration | function_decl | struct_decl | enum_decl | expr_stmt )
+    statement = ( if | for | while | return | declaration | implicit_declaration | function_decl | struct_decl | enum_decl | import_stmt | expr_stmt )
  *)
 and parse_statement parser = match peek parser with
     | Some If -> parse_if parser
@@ -835,6 +852,7 @@ and parse_statement parser = match peek parser with
     | Some Struct -> parse_struct_decl parser
     | Some Let -> parse_implicit_declaration parser
     | Some Enum -> parse_enum_decl parser
+    | Some Import -> parse_import parser
     | Some _ when starts_data_type parser -> parse_declaration parser
     | Some x when starts_expr parser -> {
             kind = ExprStmt (parse_expr parser); pos = get_token_pos parser

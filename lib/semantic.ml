@@ -446,6 +446,7 @@ and type_check_statement st (cur_ret_type: Ast.data_type) (stmt: Ast.statement) 
     | StructDeclStmt (name, ht) -> print_endline "Struct doesn't have type check??";
 
     | EnumDeclStmt (name, members) -> ()
+    | ImportStmt s -> failwith "Importing not implemented"
 
     | BlockStmt body -> ignore (type_check_block st cur_ret_type body);
 

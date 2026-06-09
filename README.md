@@ -19,3 +19,10 @@ Interpreter for StrawLang written in OCaml
 - [x] Allow struct field modification (cannot assign yet)
 - [x] Allow array value modification (cannot assign yet)
 - [ ] Better array initialization like let arr = int[10]
+
+# Planned Order
+1. multi-file / imports
+2. stdlib written in StrawLang
+3. match statement
+4. grammar.js / tooling polish
+5. syntactic sugar (single-line bodies)

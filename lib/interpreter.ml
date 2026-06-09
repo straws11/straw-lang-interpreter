@@ -445,10 +445,13 @@ and interpret_statement ctx env (stmt: Ast.statement) = match stmt.kind with
 
     | StructDeclStmt (type_name, members_ht) -> ()
 
+    | EnumDeclStmt (name, members) -> ()
+
+    | ImportStmt s -> failwith "Importing not implemented"
+
     (* TODO: this is where the env stuff is necessary too *)
     | BlockStmt body -> interpret_block ctx env body
 
-    | EnumDeclStmt (name, members) -> ()
 
     (* TODO: don't think this one is right *)
     | ExprStmt expr -> ignore (interpret_expr ctx env expr);

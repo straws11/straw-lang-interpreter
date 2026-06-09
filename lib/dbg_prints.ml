@@ -115,6 +115,7 @@ let rec dbg_string_of_token token_type = match token_type with
     | Let -> "Let"
     | Struct -> "Struct"
     | Enum -> "Enum"
+    | Import -> "Import"
     | EOF -> "EOF"
 
 let dbg_string_of_token_list token_list =
@@ -369,6 +370,11 @@ and dbg_string_of_statement depth stmt =
                 |> List.of_seq
             );
             line depth ")";
+        ]
+
+    | ImportStmt mod_name ->
+        block depth [
+            line depth ("ImportStmt(" ^ mod_name ^ ")");
         ]
 
     | BlockStmt b ->

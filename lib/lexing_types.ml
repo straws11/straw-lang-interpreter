@@ -60,6 +60,7 @@ type token_kind =
     | Let
     | Struct
     | Enum
+    | Import
 
     | EOF
 
@@ -88,4 +89,5 @@ let reserved_words = StringMap.of_seq @@ List.to_seq [
     ("let", Let);
     ("struct", Struct);
     ("enum", Enum);
+    ("import", Import);
 ]
