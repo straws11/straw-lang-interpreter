@@ -17,6 +17,7 @@ type token_kind =
     | Semicolon
     | Slash
     | Star
+    | Percent
 
     (* one or two char tokens *)
     | Bang

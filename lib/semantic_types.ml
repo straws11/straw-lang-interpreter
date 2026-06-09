@@ -32,6 +32,7 @@ let string_of_binary_op op = match op with
     | Ast.Sub -> "-"
     | Ast.Mul -> "*"
     | Ast.Div -> "/"
+    | Ast.Mod -> "%"
     | Ast.EqualOp -> "=="
     | Ast.NotEqual -> "!="
     | Ast.LessOp -> "<"

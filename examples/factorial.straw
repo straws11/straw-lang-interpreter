@@ -1,0 +1,25 @@
+func factorial_iterative(int n) -> int {
+    if n <= 0 {return n}
+    int total = 1
+    while n > 0 {
+        total = total * n
+        n--
+    }
+    return total
+}
+
+func factorial_rec(int n) -> int {
+    if n <= 0 {return n}
+    if n == 1 {return 1}
+    return n * factorial_rec(n-1)
+}
+
+print("Iterative for 10, -1 and 5")
+print(int_to_str(factorial_iterative(10)))
+print(int_to_str(factorial_iterative(-1)))
+print(int_to_str(factorial_iterative(5)))
+
+print("Recursive for 10, -1 and 5")
+print(int_to_str(factorial_rec(10)))
+print(int_to_str(factorial_rec(-1)))
+print(int_to_str(factorial_rec(5)))

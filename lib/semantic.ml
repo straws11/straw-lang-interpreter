@@ -141,7 +141,7 @@ and type_check_binary st (binary: Ast.expr) =
                     end
                 | TInteger ->
                         begin match op with
-                        | Add | Sub | Mul -> Ast.TInteger
+                        | Add | Sub | Mul | Mod -> Ast.TInteger
                         | Div -> Ast.TFloat
                         | _ -> Ast.TBoolean
                     end
@@ -171,7 +171,7 @@ and type_check_binary st (binary: Ast.expr) =
                 | TString ->
                     begin match op with
                         | Add -> Ast.TString
-                        | Div | Sub | Mul -> raise (Type_invalid_operator_error (string_of_binary_op op, str_of_dt t1, str_of_dt t2, binary.pos))
+                        | Div | Sub | Mul | Mod -> raise (Type_invalid_operator_error (string_of_binary_op op, str_of_dt t1, str_of_dt t2, binary.pos))
                         | _ -> Ast.TBoolean
                     end
                 | TArray dt -> raise (Type_invalid_operator_error (string_of_binary_op op, str_of_dt t1, str_of_dt t2, binary.pos))
@@ -265,7 +265,12 @@ and type_check_array_content st (contents: Ast.expr array) =
 and type_check_assignment st (exp: Ast.expr) = match exp.kind with
     | Ast.Assign (lhs, rhs) ->
         let rhs_t = type_check_expr st rhs in
-        begin match lhs.kind with
+        let lhs_t = type_check_expr st lhs in
+        if types_match_exact lhs_t rhs_t then
+            rhs_t
+        else
+            raise (Type_mismatch_error (str_of_dt rhs_t, str_of_dt lhs_t, exp.pos))
+        (*begin match lhs.kind with
         | Ast.Index (arr_expr, idx_expr) ->
             let arr_t = type_check_expr st arr_expr in
             let idx_t = type_check_expr st idx_expr in
@@ -278,6 +283,24 @@ and type_check_assignment st (exp: Ast.expr) = match exp.kind with
                 | TArray _, _ -> raise (Type_custom_error ("Index type must be of type int", idx_expr.pos))
                 | t, _ -> raise (Type_custom_error ("Cannot index into object of type " ^ str_of_dt t, arr_expr.pos))
             end
+
+        | Ast.FieldAccess (expr, id) ->
+            begin match type_check_expr st expr with
+                | TNamed name when not (is_enum st name) ->
+                    begin match lookup_st st name with
+                        | Some StructSymbol ht ->
+                                let member_dt = begin match Hashtbl.find_opt (fun x -> x = id) ht with
+                                    | Some dt -> dt
+                                    | None -> raise (Type_custom_error ("Field " ^ id ^ " doesn't exist on struct " ^ name, expr.pos))
+                                    end
+                                in
+
+                        | _ -> failwith "Shouldn't happen"
+                    end
+                | x -> raise (Type_mismatch_error (str_of_dt x, "a struct instance", expr.pos))
+            begin match 
+            
+
         | Ast.Variable x ->
             begin match lookup_st st x with
                 | Some VariableSymbol dt ->
@@ -289,7 +312,7 @@ and type_check_assignment st (exp: Ast.expr) = match exp.kind with
                 | _ -> raise (Type_undeclared_error (x, lhs.pos))
             end
         | _ -> raise (Type_custom_error ("Invalid assignment target", lhs.pos))
-        end
+        end*)
 
     | _ -> failwith "Impossible"
 

@@ -44,6 +44,14 @@ let run_semantic_print f =
     else
         ()
 
+let dbg_print_lex str = run_lexing_print(fun () ->
+    print_endline("[DEBUG]: " ^ str)
+)
+
+let dbg_print_parser str = run_parser_print (fun () ->
+    print_endline ("[DEBUG]: " ^ str)
+)
+
 let run_interpreter_print f =
     if !interpreter_enabled then
         f ()
@@ -65,6 +73,7 @@ let rec dbg_string_of_token token_type = match token_type with
     | Semicolon -> "Semicolon"
     | Slash -> "Slash"
     | Star -> "Star"
+    | Percent -> "Percent"
     | Bang -> "Bang"
     | BangEqual -> "BangEqual"
     | Equal -> "Equal"

@@ -1,0 +1,14 @@
+func makeCounter() -> fn() -> int {
+    let count = 0
+
+    return func() -> int {
+        count = count + 1
+        return count
+    }
+}
+
+let c = makeCounter()
+print(int_to_str(c()))
+print(int_to_str(c()))
+print(int_to_str(c()))
+print(int_to_str(c()))

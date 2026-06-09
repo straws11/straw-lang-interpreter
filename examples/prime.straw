@@ -1,0 +1,19 @@
+func is_prime(int n) -> bool {
+    for (int i = 2; i < n; i++) {
+        if n % i == 0 {
+            /*print(int_to_str(n))
+            print(int_to_str(i))
+            print(int_to_str(n % i))*/
+            return false
+        }
+    }
+    return true
+}
+
+int[] test_vals = [3, 11, 100, 5]
+
+for (int i = 0; i < test_vals.length; i++) {
+    let res_str = bool_to_str(is_prime(test_vals[i]))
+    let num_str = int_to_str(test_vals[i])
+    print(`{num_str}: {res_str}`)
+}

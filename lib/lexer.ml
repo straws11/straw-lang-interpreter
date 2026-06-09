@@ -214,6 +214,7 @@ let next_token lexer =
                     Lexing_types.Slash
 
             | '*' -> Lexing_types.Star
+            | '%' -> Lexing_types.Percent
             | '!' -> if match_char lexer '=' then
                     Lexing_types.BangEqual
                 else

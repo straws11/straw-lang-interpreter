@@ -1,0 +1,4 @@
+let arr = [1, 2, 3]
+
+arr[0] = 10
+print(int_to_str(arr[0]))

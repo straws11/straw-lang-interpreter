@@ -139,6 +139,9 @@ and interpret_assignment ctx env (lhs_expr: Ast.expr) (rhs_expr: Ast.expr) =
                 | _ -> raise (Runtime_error "Not valid indexing")
             end;
             v
+
+        | FieldAccess (expr, id) ->
+
         | Variable x -> update env x v; v
         | _ -> raise (Runtime_error "Invalid assignment target")
 
@@ -167,19 +170,11 @@ and interpret_f_string ctx env (expr: Ast.expr) =
     | _ -> failwith "Impossible"
 
 
-and interpret_struct_access ctx env (expr: Ast.expr) =
-    match expr.kind with
-    | FieldAccess (exp, id) ->
-        let v = interpret_expr ctx env exp in
-        begin match v with
-            | VStruct ht ->
-                begin match Hashtbl.find_opt ht id with
-                    | Some v -> v
-                    | _ -> failwith "Impossible"
-                end
-            | _ -> failwith "Impossible"
-        end
-    | _ -> failwith "Impossible"
+and interpret_struct_access ctx env ht id =
+    Dbg_prints.dbg_print_env env "start of interpret struct access";
+    match Hashtbl.find_opt ht id with
+        | Some v -> v
+        | _ -> failwith "Impossible"
 
 and interpret_expr ctx env (expr: Ast.expr)  = match expr.kind with
     | IntLit x -> VInteger x
@@ -214,7 +209,7 @@ and interpret_expr ctx env (expr: Ast.expr)  = match expr.kind with
             | Variable name when enum_exists ctx name -> VEnumMember (name, id)
             | _ ->
                 begin match interpret_expr ctx env expr with
-                | VStruct _ -> interpret_struct_access ctx env expr
+                | VStruct ht -> interpret_struct_access ctx env ht id
                 | VArray content -> VInteger (Array.length content)
                 | _ -> failwith "Shouldn't happen"
                 end
@@ -226,7 +221,7 @@ and interpret_expr ctx env (expr: Ast.expr)  = match expr.kind with
                 begin match interpret_expr ctx env e with
                 | VInteger i ->
                     update env name (VInteger (i + 1));
-                    VInteger (i + 1)
+                    VInteger (i)
                 | _ -> failwith "Shouldn't happen"
                 end
             | x -> raise (Runtime_error "Invalid '++' for type - must be variable")
@@ -238,7 +233,7 @@ and interpret_expr ctx env (expr: Ast.expr)  = match expr.kind with
                 begin match interpret_expr ctx env e with
                     | VInteger i ->
                         update env name (VInteger (i - 1));
-                        VInteger (i - 1)
+                        VInteger (i)
                     | _ -> failwith "Shouldn't happen"
                 end
             | x -> raise (Runtime_error "Invalid '--' for type - must be variable")
@@ -307,6 +302,11 @@ and interpret_binary ctx v1 op v2 =
         | VFloat x, VFloat y -> VFloat (x /. y)
         | VFloat x, VInteger y -> VFloat (x /. Float.of_int y)
         | VInteger x, VFloat y -> VFloat (Float.of_int x /. y)
+        | _ -> raise (Runtime_error "Invalid operator for types")
+        end
+
+    | Mod -> begin match (v1, v2) with
+        | VInteger x, VInteger y -> VInteger (x mod y)
         | _ -> raise (Runtime_error "Invalid operator for types")
         end
 

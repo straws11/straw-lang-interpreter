@@ -11,6 +11,7 @@ type binary_op =
     | Sub
     | Mul
     | Div
+    | Mod
     | NotEqual
     | EqualOp
     | LessOp

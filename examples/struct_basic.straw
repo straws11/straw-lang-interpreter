@@ -1,0 +1,14 @@
+struct Person {
+    int age,
+    str name
+}
+
+let p = Person {
+    age = 20,
+    name = "Bob"
+}
+
+print(int_to_str(p.age))
+
+p.age = p.age + 1
+print(int_to_str(p.age))

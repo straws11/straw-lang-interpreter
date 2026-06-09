@@ -18,11 +18,12 @@ open Dbg_prints
     expr_list = expr ( "," expr )*
     postfix = primary ( "(" expr_list ")" | "[" expr "]" | "." IDENTIFIER )* [ "++" | "--" ]
     unary = ( "!" | "-" ) unary | postfix
-    factor = unary ( ( "/" | "*" ) unary )*
+    factor = unary ( ( "/" | "*" | "%" ) unary )*
     term = factor ( ( "+" | "-" ) factor )*
     comparison = term ( ( ">" | ">=" | "<" | "<=" | "!=" | "==" ) term )*
     logic_and = comparison ( "and" comparison )*
     logic_or = logic_and ( "or" logic_and )*
+    (* lvalue = IDENTIFIER | lvalue "[" logic_or "]" | lvalue "." IDENTIFIER *)
     assignment = logic_or [ "=" assignment ]
     expr = assignment
     enum_decl = "enum" IDENTIFIER "{" IDENTIFIER ( "," IDENTIFIER )* "}"
@@ -68,6 +69,7 @@ let str_of_tok tok = match tok with
     | Semicolon -> ";"
     | Slash -> "/"
     | Star -> "*"
+    | Percent -> "%"
     | Bang -> "!"
     | BangEqual -> "!="
     | Equal -> "="
@@ -121,6 +123,7 @@ let get_term_op tok = match tok with
 let get_factor_op tok = match tok with
     | Slash -> Some Div
     | Star -> Some Mul
+    | Percent -> Some Mod
     | _ -> None
 
 let get_unary_op tok = match tok with
@@ -192,7 +195,7 @@ let starts_data_type parser = match peek parser with
     (* struct and enum var decl starts with 2 identifiers, the type then name OR identifier then '[' for array *)
     | Some Identifier _ ->
         begin match peek_next parser with
-            | Some Identifier _ | Some LBrack -> true
+            | Some Identifier _ -> true
             | _ -> false
         end
     | _ -> false
@@ -426,7 +429,7 @@ and parse_unary parser : Ast.expr =
     | None -> failwith "TODO Unexpected end of input. Expected unary."
 
 (*
-    factor = unary ( ( "/" | "*" ) unary )*
+    factor = unary ( ( "/" | "*" | "%" ) unary )*
 *)
 and parse_factor parser =
     let unary = parse_unary parser in
@@ -516,6 +519,31 @@ and parse_logic_or_tail parser left =
         | _ -> left
 
 (*
+    lvalue = IDENTIFIER | lvalue "[" logic_or "]" | lvalue "." IDENTIFIER
+*)
+(* and parse_lvalue parser = *)
+(*     match peek_next parser with *)
+(*         | Some LBrack -> *)
+(*             let position = get_token_pos parser in *)
+(*             let lval = parse_lvalue parser in *)
+(*             ignore (advance parser); *)
+(*             let logic_or = parse_logic_or parser in *)
+(*             expect parser RBrack "Expected ']'"; *)
+(*             { kind = Index (lval, logic_or); pos = position } *)
+(**)
+(*         | Some Dot -> *)
+(*             let position = get_token_pos parser in *)
+(*             let lval = parse_lvalue parser in *)
+(*             ignore (advance parser); *)
+(*             let id = expect_id parser in *)
+(*             { kind = FieldAccess (lval, id); pos = position } *)
+(**)
+(*         | Some x -> *)
+(*             let position = get_token_pos parser in *)
+(*             let id = expect_id parser in *)
+(*             { kind = Variable id; pos = position } *)
+(**)
+(*
     assignment = logic_or [ "=" assignment ]
 *)
 and parse_assignment parser: Ast.expr =
@@ -524,9 +552,7 @@ and parse_assignment parser: Ast.expr =
         let position = get_token_pos parser in
         ignore (advance parser);
         let rhs = parse_assignment parser in
-        match lhs.kind with
-        | Variable _ | Index (_, _) -> { kind = Assign (lhs, rhs); pos = position }
-        | _ -> raise (Parse_error ("Cannot assign to expr of this kind", lhs.pos))
+        { kind = Assign (lhs, rhs); pos = position }
     else
         lhs
 
@@ -752,7 +778,7 @@ and parse_data_type parser =
     let rec loop inner = match peek parser with
         | Some LBrack ->
             ignore (advance parser);
-            expect parser RBrack "Unexpected '['";
+            expect parser RBrack "Expected ']'";
             TArray (loop inner)
         | _ -> inner
     in
