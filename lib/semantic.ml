@@ -1,5 +1,6 @@
 open Semantic_types
 open Exceptions
+open Dbg_prints
 
 (* helpers *)
 let rec types_match_exact t1 t2 = match t1, t2 with
@@ -129,7 +130,7 @@ and type_check_binary st (binary: Ast.expr) =
         let t1 = type_check_expr st exp1 in
         let t2 = type_check_expr st exp2 in
         if not (types_match t1 t2) then
-            raise (Type_invalid_operator_error (Ast.string_of_binary_op op, str_of_dt t1, str_of_dt t2, binary.pos))
+            raise (Type_invalid_operator_error (string_of_binary_op op, str_of_dt t1, str_of_dt t2, binary.pos))
         else
             begin match t1 with
                 | TUnit -> raise (Type_custom_error ("Cannot add unit types", binary.pos))
@@ -147,33 +148,33 @@ and type_check_binary st (binary: Ast.expr) =
                 | TBoolean ->
                     begin match op with
                         | Ast.EqualOp | Ast.NotEqual -> Ast.TBoolean
-                        | _ -> raise (Type_invalid_operator_error (Ast.string_of_binary_op op, str_of_dt t1, str_of_dt t2, binary.pos))
+                        | _ -> raise (Type_invalid_operator_error (string_of_binary_op op, str_of_dt t1, str_of_dt t2, binary.pos))
                     end
 
                 | TFunction (_, _) ->
-                    raise (Type_invalid_operator_error (Ast.string_of_binary_op op, str_of_dt t1, str_of_dt t2, binary.pos))
+                    raise (Type_invalid_operator_error (string_of_binary_op op, str_of_dt t1, str_of_dt t2, binary.pos))
 
                 | TNamed name ->
                     if is_enum st name then
                         begin match op with
                             | EqualOp | NotEqual -> Ast.TBoolean
                             | _ -> raise (Type_invalid_operator_error (
-                                Ast.string_of_binary_op op,
+                                string_of_binary_op op,
                                 str_of_dt t1, str_of_dt t2,
                                 binary.pos))
                         end
                     else (* is struct *)
-                        raise (Type_invalid_operator_error (Ast.string_of_binary_op op, str_of_dt t1, str_of_dt t2, binary.pos))
+                        raise (Type_invalid_operator_error (string_of_binary_op op, str_of_dt t1, str_of_dt t2, binary.pos))
 
                 | TImplicit -> failwith "Shouldn't happen"
 
                 | TString ->
                     begin match op with
                         | Add -> Ast.TString
-                        | Div | Sub | Mul -> raise (Type_invalid_operator_error (Ast.string_of_binary_op op, str_of_dt t1, str_of_dt t2, binary.pos))
+                        | Div | Sub | Mul -> raise (Type_invalid_operator_error (string_of_binary_op op, str_of_dt t1, str_of_dt t2, binary.pos))
                         | _ -> Ast.TBoolean
                     end
-                | TArray dt -> raise (Type_invalid_operator_error (Ast.string_of_binary_op op, str_of_dt t1, str_of_dt t2, binary.pos))
+                | TArray dt -> raise (Type_invalid_operator_error (string_of_binary_op op, str_of_dt t1, str_of_dt t2, binary.pos))
 
                 end
     | _ -> failwith "Impossible"
@@ -185,14 +186,14 @@ and type_check_unary st (unary: Ast.expr) =
         begin match op with
         | Ast.Not ->
             if not (exp_type = TBoolean) then
-                raise (Type_invalid_un_operator_error (str_of_dt exp_type, Ast.string_of_unary_op op, unary.pos))
+                raise (Type_invalid_un_operator_error (str_of_dt exp_type, string_of_unary_op op, unary.pos))
             else
                 Ast.TBoolean
 
         | Ast.Negate ->
             begin match exp_type with
                 | TInteger | TFloat as x -> x
-                | _ -> raise (Type_invalid_un_operator_error (str_of_dt exp_type, Ast.string_of_unary_op op, unary.pos))
+                | _ -> raise (Type_invalid_un_operator_error (str_of_dt exp_type, string_of_unary_op op, unary.pos))
             end
         end
     | _ -> failwith "Impossible"
@@ -206,7 +207,7 @@ and type_check_logical st (logical: Ast.expr) =
             | Ast.TBoolean, Ast.TBoolean -> Ast.TBoolean
             (* | Ast.TBoolean, _ -> raise (Type_mismatch_error (str_of_dt t2, "logical", exp2.pos)) *)
             (* | _, Ast.TBoolean -> raise (Type_mismatch_error (str_of_dt t1, "logical", exp1.pos)) *)
-            | _, _ -> raise (Type_invalid_operator_error (Ast.string_of_logical_op op, str_of_dt t1, str_of_dt t2, logical.pos))
+            | _, _ -> raise (Type_invalid_operator_error (string_of_logical_op op, str_of_dt t1, str_of_dt t2, logical.pos))
         end
 
     | _ -> failwith "Impossible"
@@ -351,7 +352,6 @@ and type_check_expr st (exp: Ast.expr) = match exp.kind with
     | ArrayContent x -> type_check_array_content st x
 
     | Variable x ->
-        print_endline (x);
         begin match get_var_type st x with
             | Some y -> y
             | None -> raise (Type_undeclared_error (x, exp.pos))
@@ -520,7 +520,7 @@ and collect_declarations ast =
         | h :: t -> collect_statement st h; loop st t
         | [] -> ()
     in
-    let global_scope: scope = { outer = None; tbl =Hashtbl.create 11 } in
+    let global_scope: scope = { outer = None; tbl = Hashtbl.create 11 } in
     loop global_scope ast;
     global_scope
 

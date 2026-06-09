@@ -409,8 +409,8 @@ and interpret_statement ctx env (stmt: Ast.statement) = match stmt.kind with
                         insert env name exp
                 else
                     raise (Runtime_error ("can this error be removed?Incompatible types "
-                        ^ string_of_data_type (v_type_to_t_type exp)
-                        ^ " and " ^ string_of_data_type dt))
+                        ^ Semantic.str_of_dt (v_type_to_t_type exp)
+                        ^ " and " ^ Semantic.str_of_dt dt))
 
             | None -> insert_empty env name;
             end
@@ -471,8 +471,7 @@ and collect_declarations ast =
     in
     let global_scope: environment = { outer = None; tbl = Hashtbl.create 11 } in
     loop global_scope ast;
-    print_endline "After collection:";
-    print_env global_scope;
+    Dbg_prints.dbg_print_env global_scope "After collection:";
     global_scope
 
 and inject_stdlib st =

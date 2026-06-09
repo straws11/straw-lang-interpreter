@@ -11,23 +11,6 @@ type scope = {
     tbl: symbol_table;
 }
 
-let string_of_symbol sym = match sym with
-    | VariableSymbol dt -> "VarSym(" ^ Ast.string_of_data_type dt ^ ")"
-    | FunctionSymbol (params, dt) -> "FunSym("
-        ^ "[" ^ String.concat "," (List.map Ast.string_of_data_type params)
-        ^ "],"
-        ^ Ast.string_of_data_type dt
-        ^ ")"
-
-    | StructSymbol members -> "StructSymbol("
-        ^ String.concat ", " (
-            Hashtbl.to_seq members
-            |> Seq.map (fun (name, dt) -> Ast.string_of_data_type dt ^ " " ^ name )
-            |> List.of_seq
-        )
-        ^ ")"
-
-    | EnumSymbol members -> "EnumSymbol(" ^ String.concat ", " members ^ ")"
 
 let insert_st cur_scope key value = Hashtbl.replace cur_scope.tbl key value
 
@@ -44,15 +27,23 @@ let lookup_st cur_scope key =
     in
     loop cur_scope
 
+let string_of_binary_op op = match op with
+    | Ast.Add -> "+"
+    | Ast.Sub -> "-"
+    | Ast.Mul -> "*"
+    | Ast.Div -> "/"
+    | Ast.EqualOp -> "=="
+    | Ast.NotEqual -> "!="
+    | Ast.LessOp -> "<"
+    | Ast.LessEqualOp -> "<="
+    | Ast.GreaterOp -> ">"
+    | Ast.GreaterEqualOp -> ">="
 
-let print_st st title =
-    let rec loop level scope =
-        print_endline (String.make 3 '-' ^ "Environment " ^ string_of_int level ^ String.make 4 '-');
-        Hashtbl.iter (fun k v -> print_endline (k ^ " -> " ^ string_of_symbol v ^ "\n")) scope.tbl;
-        print_endline (String.make 20 '-' ^ "\n");
-        match scope.outer with
-            | Some s -> loop (level + 1) s
-            | None -> ()
-    in
-    print_endline title;
-    loop 0 st
+and string_of_unary_op op = match op with
+    | Ast.Not -> "!"
+    | Ast.Negate -> "-"
+
+and string_of_logical_op op = match op with
+    | Ast.AndOp -> "and"
+    | Ast.OrOp -> "or"
+

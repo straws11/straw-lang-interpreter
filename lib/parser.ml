@@ -1,6 +1,7 @@
 open Lexing_types
 open Ast
 open Exceptions
+open Dbg_prints
 (*
 ----EBNF----
 
@@ -54,6 +55,55 @@ type t = {
 let create tokens = { tokens; pos = 0 }
 
 (* helper *)
+let str_of_tok tok = match tok with
+    | LParen -> "("
+    | RParen -> ")"
+    | LBrace -> "{"
+    | RBrace -> "}"
+    | LBrack -> "["
+    | RBrack -> "]"
+    | Comma -> ","
+    | Dot -> "."
+    | Plus -> "+"
+    | Semicolon -> ";"
+    | Slash -> "/"
+    | Star -> "*"
+    | Bang -> "!"
+    | BangEqual -> "!="
+    | Equal -> "="
+    | EqualEqual -> "=="
+    | Greater -> ">"
+    | GreaterEqual -> ">="
+    | Less -> "<"
+    | LessEqual -> "<="
+    | Minus -> "-"
+    | MinusMinus -> "--"
+    | PlusPlus -> "++"
+    | Arrow -> "->"
+    | Identifier x | String x -> x
+    | FormattedString (sl, toks) -> "fstring"
+    | FloatPoint x -> string_of_float x
+    | Integer x -> string_of_int x
+    | Boolean x -> string_of_bool x
+    | And -> "and"
+    | Fn -> "fn"
+    | For -> "for"
+    | While -> "while"
+    | If -> "if"
+    | Else -> "else"
+    | Or -> "or"
+    | Return -> "return"
+    | Int -> "int"
+    | Float -> "float"
+    | Str -> "str"
+    | Bool -> "bool"
+    | Func -> "func"
+    | Let -> "let"
+    | Struct -> "struct"
+    | Enum -> "enum"
+    | EOF -> "eof"
+
+
 let get_comparison_op tok = match tok with
     | BangEqual -> Some NotEqual
     | EqualEqual -> Some EqualOp
@@ -296,7 +346,7 @@ and parse_primary parser =
                 expect parser RParen "Expected ')' after expression";
                 Group expr
 
-            | x -> raise (Parse_error ("Expected literal or variable, found " ^ string_of_token x,
+            | x -> raise (Parse_error ("Expected literal or variable, found " ^ str_of_tok x,
                     get_token_pos parser))
             end;
             pos = position }

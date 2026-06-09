@@ -1,4 +1,5 @@
 open Interpret_types
+open Dbg_prints
 open Exceptions
 
 let rec val_to_str v = match v with
@@ -11,11 +12,11 @@ let rec val_to_str v = match v with
         | UserFunction (params, return, _body, env) ->
             "fn ("
             ^ (String.concat ", " (List.map
-                (fun (dt, name) -> Ast.string_of_data_type dt ^ " " ^ name)
+                (fun (dt, name) -> dbg_string_of_data_type dt ^ " " ^ name)
             params))
             ^ ")"
-            ^ " -> " ^ Ast.string_of_data_type return
-            ^ string_of_env env
+            ^ " -> " ^ dbg_string_of_data_type return
+            ^ "<env omitted>"
 
         | BuiltinFunction x -> "Stdlib function"
         end
