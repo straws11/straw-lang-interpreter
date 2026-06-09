@@ -141,6 +141,15 @@ and interpret_assignment ctx env (lhs_expr: Ast.expr) (rhs_expr: Ast.expr) =
             v
 
         | FieldAccess (expr, id) ->
+            begin match interpret_expr ctx env expr with
+                | VStruct ht ->
+                    begin match Hashtbl.find_opt ht id with
+                        | Some _ -> Hashtbl.replace ht id v
+                    | _ -> failwith "Shouldn't happen"
+                    end;
+                    v
+                | _ -> failwith "Shouldn't happen"
+            end
 
         | Variable x -> update env x v; v
         | _ -> raise (Runtime_error "Invalid assignment target")
