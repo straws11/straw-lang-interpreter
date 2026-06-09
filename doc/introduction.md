@@ -4,6 +4,7 @@ StrawLang has the following data types:
 - int
 - float
 - bool
+- char
 
 - func
 - struct
@@ -83,6 +84,8 @@ Person me = {age = 10, name = "Dylan"}
 
 Structs can be nested and can contain functions as values.
 
+You can access struct fields using `.` operator, and assign them
+
 # Enums
 
 Enums are defined:
@@ -111,6 +114,15 @@ let wind_direction = Direction.South
 int[] nums = [1, 2, 3, 4, 5]
 print(nums[0])
 nums[0] = nums[0] + 1
+```
+
+Array variables are references, so in the following, `b` points to the same array as `a`:
+
+```
+let a = [1, 2, 3]
+let b = a
+b[1] = 10
+print(int_to_str(a[1])) // gives 10
 ```
 
 # Let keyword

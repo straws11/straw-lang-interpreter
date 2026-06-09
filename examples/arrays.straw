@@ -1,4 +1,18 @@
+func print_arr(int[] arr) {
+	for (int i = 0; i < arr.length; i++) {
+		print(int_to_str(arr[i]))
+	}
+	print("")
+}
+
 let arr = [1, 2, 3]
 
 arr[0] = 10
-print(int_to_str(arr[0]))
+print_arr(arr)
+
+let b = arr
+print_arr(b)
+
+arr[1] = 1000
+print_arr(arr)
+print_arr(b)

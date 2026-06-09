@@ -16,5 +16,6 @@ Interpreter for StrawLang written in OCaml
 - [x] stdlib for type conversion
 - [ ] Closures to only capture relevant information about environment
 - [ ] More array operations, currently messy
-- [ ] Allow struct field modification (cannot assign yet)
-- [ ] Allow array value modification (cannot assign yet)
+- [x] Allow struct field modification (cannot assign yet)
+- [x] Allow array value modification (cannot assign yet)
+- [ ] Better array initialization like let arr = int[10]

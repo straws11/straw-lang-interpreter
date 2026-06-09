@@ -12,6 +12,7 @@ let rec v_type_to_t_type v_var = match v_var with
     | VFloat _ -> TFloat
     | VBoolean _ -> TBoolean
     | VString _ -> TString
+    | VCharacter _ -> TCharacter
     (* BUG: this next line is probably wrong, what if array is empty *)
     | VArray vals -> TArray (v_type_to_t_type vals.(0))
     | VFunction UserFunction (params, ret, _block, _env) ->
@@ -30,6 +31,7 @@ let rec value_has_right_type ctx env v t =
     | VInteger _, TInteger -> true
     | VFloat _, TFloat -> true
     | VBoolean _, TBoolean -> true
+    | VCharacter _, TCharacter -> true
     | VString _, TString -> true
     | VArray x, TArray dt -> value_has_right_type ctx env x.(0) dt
     | VFunction UserFunction (params, ret, _block, _env), TFunction (dts, r) ->
@@ -52,6 +54,7 @@ let rec value_has_right_type ctx env v t =
 let types_match t1 t2 = match t1, t2 with
     | VBoolean _, VBoolean _ -> true
     | VInteger _, VInteger _ -> true
+    | VCharacter _, VCharacter _ -> true
     | VFloat _, VFloat _ -> true
     | VString _, VString _ -> true
     | VFunction _, VFunction _ -> true
@@ -114,19 +117,24 @@ and interpret_if ctx env expr body else_body =
         | _ -> raise (Runtime_error "Expression should be of type boolean")
 
 and interpret_index ctx env var idx =
-    let arr = match var with
-        | VArray vals -> vals
-        | _ -> raise (Runtime_error "Shouldn't happen")
-    in
     let idx_num = match idx with
         | VInteger x -> x
         | _ -> raise (Runtime_error "Shouldn't happen")
     in
 
-    if idx_num < 0 || idx_num > (Array.length arr) then
-        raise (Runtime_error ("Index " ^ string_of_int idx_num ^ " out of bounds of array with size " ^ string_of_int (Array.length arr)))
-    else
-        arr.(idx_num)
+    match var with
+        | VArray arr ->
+            if idx_num < 0 || idx_num > (Array.length arr) then
+                raise (Runtime_error ("Index " ^ string_of_int idx_num ^ " out of bounds for array with size " ^ string_of_int (Array.length arr)))
+            else
+                arr.(idx_num)
+        | VString s ->
+            if idx_num < 0 || idx_num > (String.length s) then
+                raise (Runtime_error ("Index " ^ string_of_int idx_num ^ " out of bounds for string with size " ^ (string_of_int (String.length s))))
+            else
+                VCharacter s.[idx_num]
+
+        | _ -> raise (Runtime_error "Shouldn't happen")
 
 and interpret_assignment ctx env (lhs_expr: Ast.expr) (rhs_expr: Ast.expr) =
     let v = interpret_expr ctx env rhs_expr in
@@ -191,7 +199,7 @@ and interpret_expr ctx env (expr: Ast.expr)  = match expr.kind with
     | BoolLit x -> VBoolean x
     | StrLit x -> VString x
     | FormattedStringLit (_, _) -> interpret_f_string ctx env expr
-    (* | EnumLit (name, mem_name) -> VEnumMember (name, mem_name) *)
+    | CharLit x -> VCharacter x
     | ArrayContent x -> VArray (Array.map (interpret_expr ctx env) x)
 
     | Variable x -> begin match lookup env x with
@@ -219,7 +227,8 @@ and interpret_expr ctx env (expr: Ast.expr)  = match expr.kind with
             | _ ->
                 begin match interpret_expr ctx env expr with
                 | VStruct ht -> interpret_struct_access ctx env ht id
-                | VArray content -> VInteger (Array.length content)
+                | VArray content when id = "length" -> VInteger (Array.length content)
+                | VString s when id = "length" -> VInteger (String.length s)
                 | _ -> failwith "Shouldn't happen"
                 end
         end
@@ -324,6 +333,7 @@ and interpret_binary ctx v1 op v2 =
         | VFloat x, VFloat y -> VBoolean (x != y)
         | VBoolean x, VBoolean y -> VBoolean (x != y)
         | VString x, VString y -> VBoolean (not (String.equal x y))
+        | VCharacter x, VCharacter y -> VBoolean (x <> y)
         | VEnumMember (name, variant), VEnumMember (nameb, variantb) ->
                 if name <> nameb then
                     raise (Runtime_error "Invalid operator for types")
@@ -336,6 +346,7 @@ and interpret_binary ctx v1 op v2 =
         | VInteger x, VInteger y -> VBoolean (x = y)
         | VFloat x, VFloat y -> VBoolean (x = y)
         | VBoolean x, VBoolean y -> VBoolean (x = y)
+        | VCharacter x, VCharacter y -> VBoolean (x = y)
         | VString x, VString y -> VBoolean (String.equal x y)
         | VEnumMember (name, variant), VEnumMember (nameb, variantb) ->
                 if name <> nameb then
@@ -349,6 +360,7 @@ and interpret_binary ctx v1 op v2 =
         | VInteger x, VInteger y -> VBoolean (x < y)
         | VFloat x, VFloat y -> VBoolean (x < y)
         | VBoolean x, VBoolean y -> VBoolean (x < y)
+        | VCharacter x, VCharacter y -> VBoolean (x < y)
         | VString x, VString y -> VBoolean (x < y)
         | _ -> raise (Runtime_error "Invalid operator for types")
         end
@@ -357,6 +369,7 @@ and interpret_binary ctx v1 op v2 =
         | VInteger x, VInteger y -> VBoolean (x <= y)
         | VFloat x, VFloat y -> VBoolean (x <= y)
         | VBoolean x, VBoolean y -> VBoolean (x <= y)
+        | VCharacter x, VCharacter y -> VBoolean (x <= y)
         | VString x, VString y -> VBoolean (x <= y)
         | _ -> raise (Runtime_error "Invalid operator for types")
         end
@@ -365,6 +378,7 @@ and interpret_binary ctx v1 op v2 =
         | VInteger x, VInteger y -> VBoolean (x > y)
         | VFloat x, VFloat y -> VBoolean (x > y)
         | VBoolean x, VBoolean y -> VBoolean (x > y)
+        | VCharacter x, VCharacter y -> VBoolean (x > y)
         | VString x, VString y -> VBoolean (x > y)
         | _ -> raise (Runtime_error "Invalid operator for types")
         end
@@ -373,6 +387,7 @@ and interpret_binary ctx v1 op v2 =
         | VInteger x, VInteger y -> VBoolean (x >= y)
         | VFloat x, VFloat y -> VBoolean (x >= y)
         | VBoolean x, VBoolean y -> VBoolean (x >= y)
+        | VCharacter x, VCharacter y -> VBoolean (x >= y)
         | VString x, VString y -> VBoolean (x >= y)
         | _ -> raise (Runtime_error "Invalid operator for types")
         end

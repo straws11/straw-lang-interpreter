@@ -87,6 +87,7 @@ let rec dbg_string_of_token token_type = match token_type with
     | PlusPlus -> "PlusPlus"
     | Arrow -> "Arrow"
     | Identifier x -> "Identifier(" ^ x ^ ")"
+    | Character x -> "Character(" ^ String.make 1 x ^ ")"
     | String x -> "String(" ^ x ^ ")"
     | FormattedString (segs, vars) ->
             "FString("
@@ -108,6 +109,7 @@ let rec dbg_string_of_token token_type = match token_type with
     | Int -> "Int"
     | Float -> "Float"
     | Str -> "Str"
+    | Char -> "Char"
     | Bool -> "Bool"
     | Func -> "Func"
     | Let -> "Let"
@@ -136,6 +138,7 @@ let rec dbg_string_of_data_type dt = match dt with
     | TInteger -> "TInteger"
     | TFloat -> "TFloat"
     | TBoolean -> "TBoolean"
+    | TCharacter -> "TCharacter"
     | TString -> "TString"
     | TArray d -> "TArray of " ^ dbg_string_of_data_type d
     | TNamed name -> "TNamed of " ^ name
@@ -161,8 +164,7 @@ and dbg_string_of_expr depth (expr: expr) =
     | FloatLit x -> line depth ("FloatLit(" ^ string_of_float x ^ ")")
     | BoolLit x -> line depth ("BoolLit(" ^ string_of_bool x ^ ")")
     | StrLit x -> line depth ("StrLit(" ^ x ^ ")")
-    (* | EnumLit (enum_name, member_name) -> *)
-    (*     line depth ("EnumLit(" ^ enum_name ^ "." ^ member_name ^ ")") *)
+    | CharLit x -> line depth ("CharLit(" ^ String.make 1 x ^ ")")
     | FormattedStringLit (segments, vars) ->
             block depth [
                 line depth "FStringLit(";
@@ -444,6 +446,7 @@ and dbg_string_of_value v = match v with
     | VInteger f -> string_of_int f
     | VFloat f -> string_of_float f
     | VBoolean b -> string_of_bool b
+    | VCharacter x -> String.make 1 x
     | VString s -> s
     | VArray vals -> "[" ^ (String.concat ", " (
         List.map dbg_string_of_value (Array.to_list vals)

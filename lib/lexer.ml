@@ -112,6 +112,11 @@ let try_escape_char lexer =
         | Some x -> retreat lexer; '\\'
         | None -> raise (Lexing_error ("Unclosed string", get_pos lexer))
 
+(* TODO: should we have 'null' character?*)
+let character lexer = match advance_opt lexer with
+    | Some c -> ignore (advance lexer); Lexing_types.Character c
+    | None -> raise (Lexing_error ("Unclosed string", get_pos lexer))
+
 let str lexer =
     let rec loop acc = match advance_opt lexer with
         | Some '"' -> string_of_rev_char_list acc
@@ -243,6 +248,7 @@ let next_token lexer =
                     Lexing_types.Minus
 
             | '0'..'9' -> number x lexer
+            | '\'' -> character lexer
             | '"' -> str lexer
             | '`' -> formatted_str lexer
             | _ -> (if is_alpha x then (retreat lexer; identifier lexer)

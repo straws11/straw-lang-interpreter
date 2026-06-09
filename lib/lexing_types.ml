@@ -35,6 +35,7 @@ type token_kind =
 
     (* literals *)
     | Identifier of string
+    | Character of char
     | String of string
     | FormattedString of string list * token list
     | FloatPoint of float
@@ -52,6 +53,7 @@ type token_kind =
     | Return
     | Int
     | Float
+    | Char
     | Str
     | Bool
     | Func
@@ -79,6 +81,7 @@ let reserved_words = StringMap.of_seq @@ List.to_seq [
     ("return", Return);
     ("int", Int);
     ("float", Float);
+    ("char", Char);
     ("str", Str);
     ("bool", Bool);
     ("func", Func);

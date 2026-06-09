@@ -1,0 +1,7 @@
+let a = 'a'
+print(char_to_str(a))
+let my_name = "Dylan"
+for (int i = 0; i < my_name.length; i++) {
+	char letter = my_name[i]
+	if letter == 'y' { print("yesss") } else { print(char_to_str(letter)) }
+}

@@ -3,6 +3,7 @@ open Dbg_prints
 open Exceptions
 
 let rec val_to_str v = match v with
+    | VCharacter x -> String.make 1 x
     | VString x -> x
     | VInteger x -> string_of_int x
     | VBoolean x -> string_of_bool x
@@ -51,7 +52,7 @@ let builtin_functions = [
     ("int_to_str", VFunction (BuiltinFunction str_fn));
     ("float_to_str", VFunction (BuiltinFunction str_fn));
     ("bool_to_str", VFunction (BuiltinFunction str_fn));
-    (* ("func_to_str", VFunction (BuiltinFunction str_fn)); *)
+    ("char_to_str", VFunction (BuiltinFunction str_fn));
     ("input", VFunction (BuiltinFunction input_fn));
 ]
 
@@ -60,6 +61,6 @@ let builtin_symbols = [
     ("int_to_str", Semantic_types.FunctionSymbol ([TInteger], TString));
     ("float_to_str", Semantic_types.FunctionSymbol ([TFloat], TString));
     ("bool_to_str", Semantic_types.FunctionSymbol ([TBoolean], TString));
-    (* ("func_to_str", Semantic_types.FunctionSymbol ([TFunction], TString)); *)
+    ("char_to_str", Semantic_types.FunctionSymbol ([TCharacter], TString));
     ("input", Semantic_types.FunctionSymbol ([TString], TString))
 ]

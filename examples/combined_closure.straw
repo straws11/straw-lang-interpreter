@@ -1,0 +1,15 @@
+struct Point { int x, int y }
+func make_point_factory() -> fn(int, int) -> Point {
+	let base = Point {x = 10, y = 10 }
+
+	return func(int dx, int dy) -> Point {
+		return Point {
+			x = base.x + dx,
+			y = base.y + dy
+		}
+	}
+}
+
+let f = make_point_factory()
+let p = f(5, 5)
+print(int_to_str(p.x))

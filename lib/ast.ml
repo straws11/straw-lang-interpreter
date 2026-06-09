@@ -24,6 +24,7 @@ type data_type =
     | TFloat
     | TBoolean
     | TString
+    | TCharacter
     | TArray of data_type
     | TFunction of data_type list * data_type
     (* Represents some custom named type - structs or enums *)
@@ -36,7 +37,7 @@ and expr_kind =
     | IntLit of int
     | BoolLit of bool
     | StrLit of string
-    (* | EnumLit of string * string *)
+    | CharLit of char
     | FormattedStringLit of string list * expr list
     | ArrayContent of expr array
     | StructExpr of string * (string, expr) Hashtbl.t

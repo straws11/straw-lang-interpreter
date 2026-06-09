@@ -8,6 +8,7 @@ and value =
     | VFloat of float
     | VBoolean of bool
     | VString of string
+    | VCharacter of char
     | VArray of value array
     | VFunction of function_value
     | VStruct of (string, value) Hashtbl.t

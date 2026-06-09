@@ -1,0 +1,7 @@
+let arr = [1, 2, 3, 4]
+
+let i = 0
+while i < arr.length {
+	print(int_to_str(arr[i]))
+	i = i+1
+}

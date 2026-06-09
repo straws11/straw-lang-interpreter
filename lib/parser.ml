@@ -11,7 +11,7 @@ open Dbg_prints
     struct_decl = "struct" IDENTIFIER "{" data_type IDENTIFIER ( "," data_type IDENTIFIER )* "}"
     array_content = "[" [ expr ( "," expr )* ]"]"
     struct_expr = IDENTIFIER "{" [ IDENTIFIER "=" expr ( "," IDENTIFIER "=" expr )* ] "}"
-    primary = ( INTEGER | FLOAT | STRING | FORMATTED_STRING | BOOLEAN
+    primary = ( INTEGER | FLOAT | STRING | FORMATTED_STRING | BOOLEAN | CHARACTER
             | IDENTIFIER | array_content | function_expr | struct_expr
             | "(" expr ")"
         )
@@ -23,7 +23,6 @@ open Dbg_prints
     comparison = term ( ( ">" | ">=" | "<" | "<=" | "!=" | "==" ) term )*
     logic_and = comparison ( "and" comparison )*
     logic_or = logic_and ( "or" logic_and )*
-    (* lvalue = IDENTIFIER | lvalue "[" logic_or "]" | lvalue "." IDENTIFIER *)
     assignment = logic_or [ "=" assignment ]
     expr = assignment
     enum_decl = "enum" IDENTIFIER "{" IDENTIFIER ( "," IDENTIFIER )* "}"
@@ -36,7 +35,7 @@ open Dbg_prints
     while = "while" expr block
     return = "return" [ expr ]
     function_type = "fn" "(" [ data_type ( "," data_type )* ] ")" [ "->" data_type ]
-    builtin_data_type = ( int | float | bool | str | function_type )
+    builtin_data_type = ( int | float | bool | str | char | function_type )
     data_type = ( builtin_data_type | IDENTIFIER ) ( [ "[" "]" ] )*
     implicit_declaration = "let" IDENTIFIER "=" expr
     declaration = data_type IDENTIFIER [ "=" expr ]
@@ -87,6 +86,7 @@ let str_of_tok tok = match tok with
     | FloatPoint x -> string_of_float x
     | Integer x -> string_of_int x
     | Boolean x -> string_of_bool x
+    | Character x -> String.make 1 x
     | And -> "and"
     | Fn -> "fn"
     | For -> "for"
@@ -95,6 +95,7 @@ let str_of_tok tok = match tok with
     | Else -> "else"
     | Or -> "or"
     | Return -> "return"
+    | Char -> "char"
     | Int -> "int"
     | Float -> "float"
     | Str -> "str"
@@ -187,11 +188,11 @@ let expect_id parser = match advance parser with
 
 (* TODO: should this be called starts_call?? *)
 let starts_primary tok = match tok with
-    | Identifier _ | String _ | FormattedString (_, _) | Boolean _ | Integer _ | FloatPoint _ | Func | LBrace | LBrack | LParen -> true
+    | Identifier _ | String _ | FormattedString (_, _) | Boolean _ | Character _ | Integer _ | FloatPoint _ | Func | LBrace | LBrack | LParen -> true
     | _ -> false
 
 let starts_data_type parser = match peek parser with
-    | Some Int | Some Float | Some Str | Some Bool | Some Fn | Some Let -> true
+    | Some Int | Some Float | Some Str | Some Char | Some Bool | Some Fn | Some Let -> true
     (* struct and enum var decl starts with 2 identifiers, the type then name OR identifier then '[' for array *)
     | Some Identifier _ ->
         begin match peek_next parser with
@@ -323,7 +324,7 @@ and parse_struct_expr parser =
     StructExpr (name, ht)
 
 (*
-    primary = INTEGER | FLOAT | STRING | FORMATTED_STRING | BOOLEAN | IDENTIFIER | array_content | function_expr | struct_expr | "(" expr ")"
+    primary = INTEGER | FLOAT | STRING | FORMATTED_STRING | BOOLEAN | CHARACTER | IDENTIFIER | array_content | function_expr | struct_expr | "(" expr ")"
 *)
 and parse_primary parser =
     match peek parser with
@@ -337,6 +338,7 @@ and parse_primary parser =
             | Integer x -> IntLit x
             | FloatPoint x -> FloatLit x
             | Boolean x -> BoolLit x
+            | Character x -> CharLit x
             | Identifier x -> begin match peek parser with
                 | Some LBrace ->
                     ignore (retreat parser);
@@ -518,31 +520,6 @@ and parse_logic_or_tail parser left =
                 parse_logic_or_tail parser { kind = Logical (left, OrOp, right); pos = position }
         | _ -> left
 
-(*
-    lvalue = IDENTIFIER | lvalue "[" logic_or "]" | lvalue "." IDENTIFIER
-*)
-(* and parse_lvalue parser = *)
-(*     match peek_next parser with *)
-(*         | Some LBrack -> *)
-(*             let position = get_token_pos parser in *)
-(*             let lval = parse_lvalue parser in *)
-(*             ignore (advance parser); *)
-(*             let logic_or = parse_logic_or parser in *)
-(*             expect parser RBrack "Expected ']'"; *)
-(*             { kind = Index (lval, logic_or); pos = position } *)
-(**)
-(*         | Some Dot -> *)
-(*             let position = get_token_pos parser in *)
-(*             let lval = parse_lvalue parser in *)
-(*             ignore (advance parser); *)
-(*             let id = expect_id parser in *)
-(*             { kind = FieldAccess (lval, id); pos = position } *)
-(**)
-(*         | Some x -> *)
-(*             let position = get_token_pos parser in *)
-(*             let id = expect_id parser in *)
-(*             { kind = Variable id; pos = position } *)
-(**)
 (*
     assignment = logic_or [ "=" assignment ]
 *)
@@ -759,13 +736,14 @@ and parse_function_type parser =
     TFunction (sig_params, return_dt)
 
 (*
-    builtin_data_type = ( int | float | bool | str | function_type )
+    builtin_data_type = ( int | float | bool | str | char | function_type )
 *)
 and parse_builtin_data_type parser =
     match advance parser with
         | Some Int -> Some TInteger
         | Some Float -> Some TFloat
         | Some Bool -> Some TBoolean
+        | Some Char -> Some TCharacter
         | Some Str -> Some TString
         | Some Fn -> ignore (retreat parser);
             Some (parse_function_type parser)

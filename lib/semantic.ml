@@ -7,6 +7,7 @@ let rec types_match_exact t1 t2 = match t1, t2 with
     | Ast.TBoolean, Ast.TBoolean -> true
     | Ast.TInteger, Ast.TInteger -> true
     | Ast.TFloat, Ast.TFloat -> true
+    | Ast.TCharacter, Ast.TCharacter -> true
     | Ast.TString, Ast.TString -> true
     | Ast.TArray x, Ast.TArray y -> types_match_exact x y
     | Ast.TFunction (dt_list, return_dt), Ast.TFunction (bdt_list, breturn_dt) ->
@@ -38,6 +39,7 @@ let rec str_of_dt dt =
     match dt with
         | Ast.TBoolean -> "bool"
         | Ast.TString -> "str"
+        | Ast.TCharacter -> "char"
         | Ast.TInteger -> "int"
         | Ast.TFloat -> "float"
         | Ast.TArray x ->  str_of_dt x ^ "[]"
@@ -137,7 +139,18 @@ and type_check_binary st (binary: Ast.expr) =
                 | TFloat ->
                     begin match op with
                         | Add | Sub | Mul | Div -> Ast.TFloat
+                        | Mod -> raise (Type_invalid_operator_error (string_of_binary_op op, str_of_dt t1, str_of_dt t2, binary.pos))
                         | _ -> Ast.TBoolean
+                    end
+                | TCharacter ->
+                    begin match op with
+                    | Add | Sub | Mul | Mod | Div ->
+                            raise (Type_invalid_operator_error (
+                                string_of_binary_op op,
+                                str_of_dt t1, str_of_dt t2,
+                                binary.pos)
+                            )
+                    | _ -> Ast.TBoolean
                     end
                 | TInteger ->
                         begin match op with
@@ -270,50 +283,6 @@ and type_check_assignment st (exp: Ast.expr) = match exp.kind with
             rhs_t
         else
             raise (Type_mismatch_error (str_of_dt rhs_t, str_of_dt lhs_t, exp.pos))
-        (*begin match lhs.kind with
-        | Ast.Index (arr_expr, idx_expr) ->
-            let arr_t = type_check_expr st arr_expr in
-            let idx_t = type_check_expr st idx_expr in
-            begin match arr_t, idx_t with
-                | TArray dt, TInteger ->
-                    if not (types_match_exact dt rhs_t) then
-                        raise (Type_mismatch_error (str_of_dt rhs_t, str_of_dt dt, rhs.pos))
-                    else
-                        rhs_t
-                | TArray _, _ -> raise (Type_custom_error ("Index type must be of type int", idx_expr.pos))
-                | t, _ -> raise (Type_custom_error ("Cannot index into object of type " ^ str_of_dt t, arr_expr.pos))
-            end
-
-        | Ast.FieldAccess (expr, id) ->
-            begin match type_check_expr st expr with
-                | TNamed name when not (is_enum st name) ->
-                    begin match lookup_st st name with
-                        | Some StructSymbol ht ->
-                                let member_dt = begin match Hashtbl.find_opt (fun x -> x = id) ht with
-                                    | Some dt -> dt
-                                    | None -> raise (Type_custom_error ("Field " ^ id ^ " doesn't exist on struct " ^ name, expr.pos))
-                                    end
-                                in
-
-                        | _ -> failwith "Shouldn't happen"
-                    end
-                | x -> raise (Type_mismatch_error (str_of_dt x, "a struct instance", expr.pos))
-            begin match 
-            
-
-        | Ast.Variable x ->
-            begin match lookup_st st x with
-                | Some VariableSymbol dt ->
-                    if types_match dt rhs_t then
-                        rhs_t
-                    else
-                        raise (Type_mismatch_error (str_of_dt rhs_t, str_of_dt dt, rhs.pos))
-                | Some FunctionSymbol (_, _) -> raise (Type_custom_error ("Cannot reassign function", rhs.pos))
-                | _ -> raise (Type_undeclared_error (x, lhs.pos))
-            end
-        | _ -> raise (Type_custom_error ("Invalid assignment target", lhs.pos))
-        end*)
-
     | _ -> failwith "Impossible"
 
 and type_check_struct_access st (exp: Ast.expr) =
@@ -365,7 +334,7 @@ and type_check_expr st (exp: Ast.expr) = match exp.kind with
     | FloatLit x -> Ast.TFloat
     | BoolLit x -> Ast.TBoolean
     | StrLit x -> Ast.TString
-    (* | EnumLit (_, _) -> type_check_enum_literal st exp *)
+    | CharLit x -> Ast.TCharacter
     | FormattedStringLit (segments, vars) -> List.iter (fun x -> match type_check_expr st x with
             | TString -> ()
             | y -> raise (Type_mismatch_error (str_of_dt y, str_of_dt TString, x.pos))
@@ -388,6 +357,7 @@ and type_check_expr st (exp: Ast.expr) = match exp.kind with
             let t2 = type_check_expr st exp2 in
             begin match t1, t2 with
                 | TArray dt, TInteger -> dt
+                | TString, TInteger -> TCharacter
                 | TArray _, x -> raise (Type_custom_error ("Invalid expression type " ^ str_of_dt x ^ " for array index", exp2.pos))
                 | x, _ -> raise (Type_custom_error ("Cannot index into value of type " ^ str_of_dt x, exp1.pos))
             end
@@ -396,7 +366,7 @@ and type_check_expr st (exp: Ast.expr) = match exp.kind with
         begin match type_check_expr st expr with
             | Ast.TNamed x when is_enum st x -> type_check_enum_access st exp
             | Ast.TNamed x -> type_check_struct_access st exp
-            | Ast.TArray dt ->
+            | Ast.TArray _ | Ast.TString ->
                 if id = "length" then
                     Ast.TInteger
                 else
