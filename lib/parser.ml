@@ -713,7 +713,7 @@ and parse_data_type parser =
     (*No builtin, let's check other id option*)
     | None ->
         begin match peek parser with
-            | Some Identifier struct_name -> ignore (advance parser); loop (TStruct struct_name)
+            | Some Identifier named -> ignore (advance parser); loop (TNamed named)
             | Some _ | None -> raise (Parse_error ("Data type expected", get_token_pos parser))
         end
 

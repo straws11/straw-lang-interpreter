@@ -5,4 +5,10 @@ enum Direction {
 	West
 }
 
-let mydir = Direction.North
+let mydir = Direction.South
+
+if mydir == Direction.South {
+	print("it's south")
+} else {
+	print("nope, it's another direction")
+}

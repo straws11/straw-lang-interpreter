@@ -25,8 +25,8 @@ type data_type =
     | TString
     | TArray of data_type
     | TFunction of data_type list * data_type
-    | TStruct of string
-    | TEnum of string
+    (* Represents some custom named type - structs or enums *)
+    | TNamed of string
     | TImplicit (* this one shouldn't exist after semantic analysis *)
     | TUnit
 
@@ -99,8 +99,7 @@ let rec string_of_data_type dt = match dt with
     | TBoolean -> "TBoolean"
     | TString -> "TString"
     | TArray d -> "TArray of " ^ string_of_data_type d
-    | TStruct name -> "TStruct of " ^ name
-    | TEnum name -> "TEnum of " ^ name
+    | TNamed name -> "TNamed of " ^ name
     | TFunction (dts, return) -> "TFunction("
         ^ String.concat ", " (List.map string_of_data_type dts)
         ^ ") -> " ^ string_of_data_type return

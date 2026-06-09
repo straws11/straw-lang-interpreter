@@ -16,7 +16,7 @@ let rec types_match_exact t1 t2 = match t1, t2 with
         ) in
         not (List.exists (fun x -> x = false) match_statuses)
 
-    | Ast.TStruct x, Ast.TStruct y -> x = y
+    | Ast.TNamed x, Ast.TNamed y -> x = y
     | _ -> false
 
 (* added compat checks for say floats and ints*)
@@ -28,6 +28,10 @@ let types_match t1 t2 =
         | Ast.TFloat, Ast.TInteger -> true
         | Ast.TInteger, Ast.TFloat -> true
         | _ -> false
+
+let is_enum st name = match lookup_st st name with
+    | Some EnumSymbol _ -> true
+    | _ -> false
 
 let rec str_of_dt dt =
     match dt with
@@ -42,8 +46,7 @@ let rec str_of_dt dt =
             ^ ")"
         | Ast.TUnit -> "unit"
         | Ast.TImplicit -> "implicit, idk if this should ever display lol"
-        | Ast.TStruct name -> name ^ " (struct)"
-        | Ast.TEnum name -> name ^ " (enum)"
+        | Ast.TNamed name -> name ^ " (named)"
 
 let create_new_scope outer_scope = { outer = outer_scope; tbl = Hashtbl.create 11 }
 
@@ -75,8 +78,7 @@ and get_var_type st var: (Ast.data_type option) = match lookup_st st var with
     | Some VariableSymbol x -> Some x
     | Some FunctionSymbol (param_dts, return_dt) ->
         Some (TFunction (param_dts, return_dt))
-    | Some StructSymbol _ -> Some (Ast.TStruct var)
-    | Some EnumSymbol _ -> Some (Ast.TEnum var)
+    | Some StructSymbol _ | Some EnumSymbol _ -> Some (Ast.TNamed var)
     | None -> None
 
 and type_check_struct_expression st (exp: Ast.expr) =
@@ -86,7 +88,7 @@ and type_check_struct_expression st (exp: Ast.expr) =
             | Some StructSymbol x -> Hashtbl.copy x
             | _ ->
                 begin match get_var_type st type_name with
-                | Some t -> raise (Type_mismatch_error (str_of_dt t, str_of_dt (TStruct type_name), exp.pos))
+                | Some t -> raise (Type_mismatch_error (str_of_dt t, str_of_dt (TNamed type_name), exp.pos))
                 | None -> raise (Type_undeclared_error (type_name, exp.pos))
                 end
         in
@@ -116,7 +118,7 @@ and type_check_struct_expression st (exp: Ast.expr) =
             raise (Type_custom_error ("Missing " ^ missing_fields
                 ^ " from type " ^ type_name, exp.pos))
         else
-            Ast.TStruct type_name
+            Ast.TNamed type_name
 
     | _ -> failwith "Impossible"
 
@@ -148,8 +150,20 @@ and type_check_binary st (binary: Ast.expr) =
                         | _ -> raise (Type_invalid_operator_error (Ast.string_of_binary_op op, str_of_dt t1, str_of_dt t2, binary.pos))
                     end
 
-                | TFunction (_, _) | TStruct _ | TEnum _ ->
+                | TFunction (_, _) ->
                     raise (Type_invalid_operator_error (Ast.string_of_binary_op op, str_of_dt t1, str_of_dt t2, binary.pos))
+
+                | TNamed name ->
+                    if is_enum st name then
+                        begin match op with
+                            | EqualOp | NotEqual -> Ast.TBoolean
+                            | _ -> raise (Type_invalid_operator_error (
+                                Ast.string_of_binary_op op,
+                                str_of_dt t1, str_of_dt t2,
+                                binary.pos))
+                        end
+                    else (* is struct *)
+                        raise (Type_invalid_operator_error (Ast.string_of_binary_op op, str_of_dt t1, str_of_dt t2, binary.pos))
 
                 | TImplicit -> failwith "Shouldn't happen"
 
@@ -284,7 +298,7 @@ and type_check_struct_access st (exp: Ast.expr) =
         let type_name =
             (* TODO: this is redundant i already have it*)
             begin match type_check_expr st expr with
-                | TStruct x -> x
+                | TNamed x when not (is_enum st x) -> x
                 | x -> raise (Type_mismatch_error (str_of_dt x, "a struct type", expr.pos))
             end
         in
@@ -300,31 +314,12 @@ and type_check_struct_access st (exp: Ast.expr) =
 
     | _ -> failwith "Impossible"
 
-(* and type_check_enum_literal st (expr: Ast.expr) = *)
-(*     match expr.kind with *)
-(*     | EnumLit (name, mem_name) -> *)
-(*         begin match lookup_st st name with *)
-(*         | Some EnumSymbol enum_members -> *)
-(*             begin match List.find_opt (fun x -> x = mem_name) enum_members with *)
-(*                 | Some _ -> Ast.TEnum name *)
-(*                 | None -> raise (Type_custom_error ( *)
-(*                     "Enum member " ^ mem_name ^ " doesn't exist on type " ^ name *)
-(*                     , expr.pos)) *)
-(*             end *)
-(*         | Some x -> begin match get_var_type st name with *)
-(*                 | Some vt -> raise (Type_mismatch_error (str_of_dt vt, str_of_dt (Ast.TEnum name), expr.pos)) *)
-(*                 | None -> raise (Type_undeclared_error (mem_name, expr.pos)) *)
-(*                 end *)
-(*         | None -> raise (Type_undeclared_error (mem_name, expr.pos)) *)
-(*         end *)
-(*     | _ -> failwith "Impossible" *)
-
 and type_check_enum_access st (expr: Ast.expr) =
     match expr.kind with
     | FieldAccess (expr, id) ->
         let type_name =
             begin match type_check_expr st expr with
-                | TEnum x -> x
+                | TNamed x when is_enum st x -> x
                 | x -> raise (Type_mismatch_error (str_of_dt x, "an enum type", expr.pos))
             end
         in
@@ -335,7 +330,7 @@ and type_check_enum_access st (expr: Ast.expr) =
         in
         begin match List.find_opt (fun x -> x = id) enum_members with
             (* TODO: check this logic *)
-            | Some _ -> Ast.TEnum type_name
+            | Some _ -> Ast.TNamed type_name
             | None -> raise (Type_custom_error ("Field " ^ id ^ " doesn't exist on type " ^ type_name, expr.pos))
         end
 
@@ -376,8 +371,8 @@ and type_check_expr st (exp: Ast.expr) = match exp.kind with
 
     | FieldAccess (expr, id) ->
         begin match type_check_expr st expr with
-            | Ast.TStruct _name -> type_check_struct_access st exp
-            | Ast.TEnum _name -> type_check_enum_access st exp
+            | Ast.TNamed x when is_enum st x -> type_check_enum_access st exp
+            | Ast.TNamed x -> type_check_struct_access st exp
             | Ast.TArray dt ->
                 if id = "length" then
                     Ast.TInteger
@@ -538,5 +533,6 @@ and run_type_checking (ast: Ast.block) =
     inject_stdlib_symbols st;
     print_st st "Collected declarations for type-checking:";
     type_check st ast;
-    print_st st "after type checking st"
+    print_st st "after type checking st";
+    st
 

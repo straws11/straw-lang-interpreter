@@ -42,8 +42,8 @@ let () =
     let out = loop ast in
     print_endline (out);
 
-    Semantic.run_type_checking ast;
+    let st = Semantic.run_type_checking ast in
 
-    Interpreter.interpret ast
+    Interpreter.interpret st ast
 
 
