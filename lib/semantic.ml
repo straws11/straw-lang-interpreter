@@ -56,11 +56,11 @@ let create_new_scope outer_scope = { outer = outer_scope; tbl = Hashtbl.create 1
 let safe_array_get arr i =
     if i >= 0 && i < Array.length arr then Some arr.(i) else None
 
-let rec type_check_return st cur_return_type (ret: Ast.statement) =
+let rec type_check_return program_data cur_return_type (ret: Ast.statement) =
     match ret.kind with
     | Ast.ReturnStmt expr_op ->
         let exp_type = match expr_op with
-            | Some exp -> Some (type_check_expr st exp)
+            | Some exp -> Some (type_check_expr program_data exp)
             | None -> None
         in
         begin match cur_return_type, exp_type with
@@ -77,20 +77,20 @@ let rec type_check_return st cur_return_type (ret: Ast.statement) =
         end
     | _ -> failwith "Impossible"
 
-and get_var_type st var: (Ast.data_type option) = match lookup_st st var with
+and get_var_type program_data var: (Ast.data_type option) = match lookup_st program_data var with
     | Some VariableSymbol x -> Some x
     | Some FunctionSymbol (param_dts, return_dt) ->
         Some (TFunction (param_dts, return_dt))
     | Some StructSymbol _ | Some EnumSymbol _ -> Some (Ast.TNamed var)
     | None -> None
 
-and type_check_struct_expression st (exp: Ast.expr) =
+and type_check_struct_expression program_data (exp: Ast.expr) =
     match exp.kind with
     | StructExpr (type_name, expr_ht) ->
-        let expected_members_ht = match lookup_st st type_name with
+        let expected_members_ht = match lookup_st program_data type_name with
             | Some StructSymbol x -> Hashtbl.copy x
             | _ ->
-                begin match get_var_type st type_name with
+                begin match get_var_type program_data type_name with
                 | Some t -> raise (Type_mismatch_error (str_of_dt t, str_of_dt (TNamed type_name), exp.pos))
                 | None -> raise (Type_undeclared_error (type_name, exp.pos))
                 end
@@ -105,7 +105,7 @@ and type_check_struct_expression st (exp: Ast.expr) =
                     ))
                 end
             in
-            let field_dt = type_check_expr st expr in
+            let field_dt = type_check_expr program_data expr in
             if not (types_match field_dt stored_mem_type) then
                 raise (Type_mismatch_error (str_of_dt field_dt, str_of_dt stored_mem_type, exp.pos))
             else
@@ -126,11 +126,11 @@ and type_check_struct_expression st (exp: Ast.expr) =
     | _ -> failwith "Impossible"
 
 
-and type_check_binary st (binary: Ast.expr) =
+and type_check_binary program_data (binary: Ast.expr) =
     match binary.kind with
     | Ast.Binary (exp1, op, exp2) ->
-        let t1 = type_check_expr st exp1 in
-        let t2 = type_check_expr st exp2 in
+        let t1 = type_check_expr program_data exp1 in
+        let t2 = type_check_expr program_data exp2 in
         if not (types_match t1 t2) then
             raise (Type_invalid_operator_error (string_of_binary_op op, str_of_dt t1, str_of_dt t2, binary.pos))
         else
@@ -168,7 +168,7 @@ and type_check_binary st (binary: Ast.expr) =
                     raise (Type_invalid_operator_error (string_of_binary_op op, str_of_dt t1, str_of_dt t2, binary.pos))
 
                 | TNamed name ->
-                    if is_enum st name then
+                    if is_enum program_data name then
                         begin match op with
                             | EqualOp | NotEqual -> Ast.TBoolean
                             | _ -> raise (Type_invalid_operator_error (
@@ -192,10 +192,10 @@ and type_check_binary st (binary: Ast.expr) =
                 end
     | _ -> failwith "Impossible"
 
-and type_check_unary st (unary: Ast.expr) =
+and type_check_unary program_data (unary: Ast.expr) =
     match unary.kind with
     | Ast.Unary (op, exp) ->
-        let exp_type = type_check_expr st exp in
+        let exp_type = type_check_expr program_data exp in
         begin match op with
         | Ast.Not ->
             if not (exp_type = TBoolean) then
@@ -211,11 +211,11 @@ and type_check_unary st (unary: Ast.expr) =
         end
     | _ -> failwith "Impossible"
 
-and type_check_logical st (logical: Ast.expr) =
+and type_check_logical program_data (logical: Ast.expr) =
     match logical.kind with
     | Ast.Logical (exp1, op, exp2) ->
-        let t1 = type_check_expr st exp1 in
-        let t2 = type_check_expr st exp2 in
+        let t1 = type_check_expr program_data exp1 in
+        let t2 = type_check_expr program_data exp2 in
         begin match t1, t2 with
             | Ast.TBoolean, Ast.TBoolean -> Ast.TBoolean
             (* | Ast.TBoolean, _ -> raise (Type_mismatch_error (str_of_dt t2, "logical", exp2.pos)) *)
@@ -225,12 +225,12 @@ and type_check_logical st (logical: Ast.expr) =
 
     | _ -> failwith "Impossible"
 
-and type_check_call st (exp: Ast.expr) =
-    let rec loop st exprs data_types = match exprs, data_types with
+and type_check_call program_data (exp: Ast.expr) =
+    let rec loop program_data exprs data_types = match exprs, data_types with
         | h :: t, dh :: dt ->
-            let e = type_check_expr st h in
+            let e = type_check_expr program_data h in
             if types_match_exact e dh then
-                loop st t dt
+                loop program_data t dt
             else
                 raise (Type_mismatch_error (str_of_dt e, str_of_dt dh, exp.pos))
 
@@ -241,13 +241,13 @@ and type_check_call st (exp: Ast.expr) =
 
     match exp.kind with
     | Call (expr, param_exprs) ->
-        print_st st "before calling type check";
+        print_st program_data "before calling type check";
         begin match expr with
         (* TODO: FunExpr should also be able to match `fn (str smth){}("hi")` *)
         | { kind = Variable x; _ } ->
-            begin match lookup_st st x with
+            begin match lookup_st program_data x with
                 | Some FunctionSymbol (param_dts, ret_dt) ->
-                    loop st param_exprs param_dts;
+                    loop program_data param_exprs param_dts;
                     ret_dt
 
                 | Some VariableSymbol dt -> raise (Type_custom_error ("Variable of type " ^ str_of_dt dt ^ " not callable", exp.pos))
@@ -260,7 +260,7 @@ and type_check_call st (exp: Ast.expr) =
 
 
 
-and type_check_array_content st (contents: Ast.expr array) =
+and type_check_array_content program_data (contents: Ast.expr array) =
     let rec loop idx ty rem = match rem with
         | h :: t ->
             if ty = h then
@@ -269,33 +269,33 @@ and type_check_array_content st (contents: Ast.expr array) =
                 raise (Type_mismatch_error (str_of_dt h, str_of_dt ty, contents.(idx).pos))
         | [] -> ()
     in
-    let dts = Array.map (type_check_expr st) contents in
+    let dts = Array.map (type_check_expr program_data) contents in
 
     match safe_array_get dts 0 with
         | Some dt -> loop 0 dt (Array.to_list dts); Ast.TArray dt
         | None -> failwith "array empty, how should I get the type??"
 
-and type_check_assignment st (exp: Ast.expr) = match exp.kind with
+and type_check_assignment program_data (exp: Ast.expr) = match exp.kind with
     | Ast.Assign (lhs, rhs) ->
-        let rhs_t = type_check_expr st rhs in
-        let lhs_t = type_check_expr st lhs in
+        let rhs_t = type_check_expr program_data rhs in
+        let lhs_t = type_check_expr program_data lhs in
         if types_match_exact lhs_t rhs_t then
             rhs_t
         else
             raise (Type_mismatch_error (str_of_dt rhs_t, str_of_dt lhs_t, exp.pos))
     | _ -> failwith "Impossible"
 
-and type_check_struct_access st (exp: Ast.expr) =
+and type_check_struct_access program_data (exp: Ast.expr) =
     match exp.kind with
     | FieldAccess (expr, id) ->
         let type_name =
             (* TODO: this is redundant i already have it*)
-            begin match type_check_expr st expr with
-                | TNamed x when not (is_enum st x) -> x
+            begin match type_check_expr program_data expr with
+                | TNamed x when not (is_enum program_data x) -> x
                 | x -> raise (Type_mismatch_error (str_of_dt x, "a struct type", expr.pos))
             end
         in
-        let fields_ht = match lookup_st st type_name with
+        let fields_ht = match lookup_st program_data type_name with
             | Some StructSymbol ht -> ht
             | Some x -> raise (Type_custom_error ("Not a struct type", expr.pos))
             | _ -> raise (Type_custom_error ("Struct type doesn't exist", exp.pos))
@@ -307,16 +307,16 @@ and type_check_struct_access st (exp: Ast.expr) =
 
     | _ -> failwith "Impossible"
 
-and type_check_enum_access st (expr: Ast.expr) =
+and type_check_enum_access program_data (expr: Ast.expr) =
     match expr.kind with
     | FieldAccess (expr, id) ->
         let type_name =
-            begin match type_check_expr st expr with
-                | TNamed x when is_enum st x -> x
+            begin match type_check_expr program_data expr with
+                | TNamed x when is_enum program_data x -> x
                 | x -> raise (Type_mismatch_error (str_of_dt x, "an enum type", expr.pos))
             end
         in
-        let enum_members = match lookup_st st type_name with
+        let enum_members = match lookup_st program_data type_name with
             | Some EnumSymbol members -> members
             | Some x -> raise (Type_custom_error ("Not an enum type", expr.pos))
             | _ -> raise (Type_custom_error ("Enum type doesn't exist", expr.pos))
@@ -329,32 +329,32 @@ and type_check_enum_access st (expr: Ast.expr) =
 
     | _ -> failwith "Impossible"
 
-and type_check_expr st (exp: Ast.expr) = match exp.kind with
+and type_check_expr program_data (exp: Ast.expr) = match exp.kind with
     | IntLit x -> Ast.TInteger
     | FloatLit x -> Ast.TFloat
     | BoolLit x -> Ast.TBoolean
     | StrLit x -> Ast.TString
     | CharLit x -> Ast.TCharacter
-    | FormattedStringLit (segments, vars) -> List.iter (fun x -> match type_check_expr st x with
+    | FormattedStringLit (segments, vars) -> List.iter (fun x -> match type_check_expr program_data x with
             | TString -> ()
             | y -> raise (Type_mismatch_error (str_of_dt y, str_of_dt TString, x.pos))
         ) vars;
         TString
 
-    | ArrayContent x -> type_check_array_content st x
+    | ArrayContent x -> type_check_array_content program_data x
 
     | Variable x ->
-        begin match get_var_type st x with
+        begin match get_var_type program_data x with
             | Some y -> y
             | None -> raise (Type_undeclared_error (x, exp.pos))
         end
 
     (* TODO: nesting of this and typecheck params *)
-    | Call (_, _) -> type_check_call st exp
+    | Call (_, _) -> type_check_call program_data exp
 
     | Index (exp1, exp2) ->
-            let t1 = type_check_expr st exp1 in
-            let t2 = type_check_expr st exp2 in
+            let t1 = type_check_expr program_data exp1 in
+            let t2 = type_check_expr program_data exp2 in
             begin match t1, t2 with
                 | TArray dt, TInteger -> dt
                 | TString, TInteger -> TCharacter
@@ -363,9 +363,9 @@ and type_check_expr st (exp: Ast.expr) = match exp.kind with
             end
 
     | FieldAccess (expr, id) ->
-        begin match type_check_expr st expr with
-            | Ast.TNamed x when is_enum st x -> type_check_enum_access st exp
-            | Ast.TNamed x -> type_check_struct_access st exp
+        begin match type_check_expr program_data expr with
+            | Ast.TNamed x when is_enum program_data x -> type_check_enum_access program_data exp
+            | Ast.TNamed x -> type_check_struct_access program_data exp
             | Ast.TArray _ | Ast.TString ->
                 if id = "length" then
                     Ast.TInteger
@@ -375,59 +375,59 @@ and type_check_expr st (exp: Ast.expr) = match exp.kind with
         end
 
     | PostfixInc e | PostfixDec e ->
-        begin match type_check_expr st e with
+        begin match type_check_expr program_data e with
             | TInteger -> TInteger
             | x -> raise (Type_mismatch_error (str_of_dt x, str_of_dt TInteger, e.pos))
         end
 
-    | Binary (_, _, _) -> type_check_binary st exp
-    | Unary (_, _) -> type_check_unary st exp
-    | Logical (_, _, _) -> type_check_logical st exp
-    | Assign (_, _) -> type_check_assignment st exp
+    | Binary (_, _, _) -> type_check_binary program_data exp
+    | Unary (_, _) -> type_check_unary program_data exp
+    | Logical (_, _, _) -> type_check_logical program_data exp
+    | Assign (_, _) -> type_check_assignment program_data exp
     | FunExpr (params, dt, body) ->
-        type_check_function_block st params dt body;
+        type_check_function_block program_data params dt body;
         let param_dts = List.map (fun p -> fst p) params in
         Ast.TFunction (param_dts, dt)
-    | StructExpr _ -> type_check_struct_expression st exp
-    | Group exp -> type_check_expr st exp
+    | StructExpr _ -> type_check_struct_expression program_data exp
+    | Group exp -> type_check_expr program_data exp
 
-and type_check_statement st (cur_ret_type: Ast.data_type) (stmt: Ast.statement) = match stmt.kind with
+and type_check_statement program_data (cur_ret_type: Ast.data_type) (stmt: Ast.statement) = match stmt.kind with
     | IfStmt (exp, body, else_body_op) ->
-            let exp_type = type_check_expr st exp in
+            let exp_type = type_check_expr program_data exp in
             begin match exp_type with
                 | Ast.TBoolean -> ()
                 | _ -> raise (Type_mismatch_error (str_of_dt exp_type, str_of_dt TBoolean, stmt.pos))
             end;
-            type_check_block st cur_ret_type body;
+            type_check_block program_data cur_ret_type body;
 
             begin match else_body_op with
-                | Some eb -> type_check_block st cur_ret_type eb
+                | Some eb -> type_check_block program_data cur_ret_type eb
                 | None -> ()
             end
 
     | WhileStmt (exp, body) ->
-            let exp_type = type_check_expr st exp in
+            let exp_type = type_check_expr program_data exp in
             begin match exp_type with
                 | Ast.TBoolean -> ()
                 | _ -> raise (Type_mismatch_error (str_of_dt exp_type, str_of_dt Ast.TBoolean, stmt.pos))
             end;
 
-            type_check_block st cur_ret_type body;
+            type_check_block program_data cur_ret_type body;
 
-    | ReturnStmt _ -> ignore (type_check_return st cur_ret_type stmt);
+    | ReturnStmt _ -> ignore (type_check_return program_data cur_ret_type stmt);
 
     | VarDeclStmt (dt, name, exp_op) ->
         begin match exp_op with
             | Some e ->
-                let e_type = type_check_expr st e in
+                let e_type = type_check_expr program_data e in
                 (* insert appropriate symbol for the type (functions are different) *)
                 begin match e_type with
                     | TFunction (param_dts, return_dt) ->
                         let sym = FunctionSymbol (param_dts, return_dt) in
-                        insert_st st name sym;
+                        insert_st program_data name sym;
                     | _ ->
                         let sym = VariableSymbol e_type in
-                        insert_st st name sym;
+                        insert_st program_data name sym;
                 end;
                 (* set the type for those that were implicit and typecheck those that were explicit *)
                 begin match dt with
@@ -441,42 +441,42 @@ and type_check_statement st (cur_ret_type: Ast.data_type) (stmt: Ast.statement) 
         end
 
     | FunDeclStmt (_name, params, dt, body) -> (* most already logged by first pass *)
-            type_check_function_block st params dt body;
+            type_check_function_block program_data params dt body;
 
     | StructDeclStmt (name, ht) -> print_endline "Struct doesn't have type check??";
 
     | EnumDeclStmt (name, members) -> ()
     | ImportStmt s -> failwith "Importing not implemented"
 
-    | BlockStmt body -> ignore (type_check_block st cur_ret_type body);
+    | BlockStmt body -> ignore (type_check_block program_data cur_ret_type body);
 
-    | ExprStmt exp -> ignore (type_check_expr st exp);
+    | ExprStmt exp -> ignore (type_check_expr program_data exp);
 
-and type_check_statement_list st ret_type stmts =
+and type_check_statement_list program_data ret_type stmts =
     let rec loop scope lst = match lst with
         | h :: t -> type_check_statement scope ret_type h; loop scope t
         | [] -> ()
     in
-    loop st stmts
+    loop program_data stmts
 
-and type_check_function_block st params dt body =
-    let rec loop st lst = match lst with
+and type_check_function_block program_data params dt body =
+    let rec loop program_data lst = match lst with
         | h :: t ->
                 let sym = VariableSymbol (fst h) in
-                insert_st st (snd h) sym;
-                loop st t
+                insert_st program_data (snd h) sym;
+                loop program_data t
         | [] -> ()
     in
 
-    let inner_scope: scope = create_new_scope (Some st) in
+    let inner_scope: scope = create_new_scope (Some program_data) in
     loop inner_scope params;
     type_check_statement_list inner_scope dt body
 
-and type_check_block st ret_type body =
-    let inner_scope: scope = create_new_scope (Some st) in
+and type_check_block program_data ret_type body =
+    let inner_scope: scope = create_new_scope (Some program_data) in
     type_check_statement_list inner_scope ret_type body
 
-and type_check st ast = List.iter (type_check_statement st TInteger) ast
+and type_check program_data ast = List.iter (type_check_statement program_data TInteger) ast
 
 and collect_statement sym_tbl (stmt: Ast.statement) = match stmt.kind with
     | VarDeclStmt (_dt, name, Some { kind = FunExpr (params, return_op, _body); _ }) ->
@@ -510,8 +510,8 @@ and collect_statement sym_tbl (stmt: Ast.statement) = match stmt.kind with
     | _ -> ()
 
 and collect_declarations ast =
-    let rec loop st rem_stmts = match rem_stmts with
-        | h :: t -> collect_statement st h; loop st t
+    let rec loop program_data rem_stmts = match rem_stmts with
+        | h :: t -> collect_statement program_data h; loop program_data t
         | [] -> ()
     in
     let global_scope: scope = { outer = None; tbl = Hashtbl.create 11 } in
@@ -519,14 +519,14 @@ and collect_declarations ast =
     global_scope
 
 
-and inject_stdlib_symbols st =
-    List.iter (fun (name, sym) -> insert_st st name sym) Stdlib.builtin_symbols
+and inject_stdlib_symbols program_data =
+    List.iter (fun (name, sym) -> insert_st program_data name sym) Stdlib.builtin_symbols
 
 and run_type_checking (ast: Ast.block) =
-    let st = collect_declarations ast in
-    inject_stdlib_symbols st;
-    print_st st "Collected declarations for type-checking:";
-    type_check st ast;
-    print_st st "after type checking st";
-    st
+    let program_data = collect_declarations ast in
+    inject_stdlib_symbols program_data;
+    print_st program_data "Collected declarations for type-checking:";
+    type_check program_data ast;
+    print_st program_data "after type checking st";
+    program_data
 

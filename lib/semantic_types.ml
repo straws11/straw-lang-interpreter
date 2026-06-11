@@ -11,6 +11,11 @@ type scope = {
     tbl: symbol_table;
 }
 
+type program_data = {
+    current_file_scope: scope;
+    modules: symbol_table list;
+}
+
 
 let insert_st cur_scope key value = Hashtbl.replace cur_scope.tbl key value
 
