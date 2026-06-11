@@ -11,10 +11,9 @@ open Dbg_prints
     struct_decl = "struct" IDENTIFIER "{" data_type IDENTIFIER ( "," data_type IDENTIFIER )* "}"
     array_content = "[" [ expr ( "," expr )* ]"]"
     struct_expr = IDENTIFIER "{" [ IDENTIFIER "=" expr ( "," IDENTIFIER "=" expr )* ] "}"
-    array_initializer = data_type "[" expr "]"
     primary = ( INTEGER | FLOAT | STRING | FORMATTED_STRING | BOOLEAN | CHARACTER
             | IDENTIFIER | array_content | function_expr | struct_expr
-            | "(" expr ")" | array_initializer
+            | "(" expr ")"
         )
     expr_list = expr ( "," expr )*
     postfix = primary ( "(" expr_list ")" | "[" expr "]" | "." IDENTIFIER )* [ "++" | "--" ]
@@ -325,17 +324,15 @@ and parse_struct_expr parser =
     expect parser RBrace "Expected '}' for struct instantiation end";
     let ht = Hashtbl.of_seq (List.to_seq content) in
     StructExpr (name, ht)
-(*
-    array_initializer = data_type "[" expr "]"
-*)
-and parse_array_initializer parser =()
+
 
 (*
-    primary = INTEGER | FLOAT | STRING | FORMATTED_STRING | BOOLEAN | CHARACTER | IDENTIFIER | array_content | function_expr | struct_expr | "(" expr ")" | data_type "[" expr "]"
+    primary = INTEGER | FLOAT | STRING | FORMATTED_STRING | BOOLEAN | CHARACTER | IDENTIFIER | array_content | function_expr | struct_expr | "(" expr ")"
 *)
 and parse_primary parser =
     match peek parser with
         | Some Func -> parse_function_expr parser
+        | Some tok ->
             let position = get_token_pos parser in
             ignore (advance parser);
             { kind = begin match tok with
@@ -349,9 +346,6 @@ and parse_primary parser =
                 | Some LBrace ->
                     ignore (retreat parser);
                     parse_struct_expr parser
-                | Some LBrack ->
-                    ignore (retreat parser);
-                    parse_array_initializer parser
                 | _ -> Variable x
                 end
             | LBrack -> parse_array_content parser
@@ -360,7 +354,6 @@ and parse_primary parser =
                 expect parser RParen "Expected ')' after expression";
                 Group expr
 
-            | Int | Float | Char | Str | Bool ->  
             | x -> raise (Parse_error ("Expected literal or variable, found " ^ str_of_tok x,
                     get_token_pos parser))
             end;
