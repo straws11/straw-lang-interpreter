@@ -11,9 +11,12 @@ type scope = {
     tbl: symbol_table;
 }
 
+module StringSet = Set.Make(String)
+
 type program_data = {
-    current_file_scope: scope;
-    modules: symbol_table list;
+    mutable current_file_scope: scope;
+    modules: (string, symbol_table) Hashtbl.t;
+    import_tracking: StringSet.t;
 }
 
 

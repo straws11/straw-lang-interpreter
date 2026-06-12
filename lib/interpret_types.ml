@@ -15,9 +15,16 @@ and value =
     | VEnumMember of string * string
     | VUnit
 
+and env_tbl = (string, value option) Hashtbl.t
+
 and environment = {
     outer: environment option;
-    tbl: (string, value option) Hashtbl.t;
+    tbl: env_tbl
+}
+
+and program_ctx = {
+    current_env : environment;
+    modules: (string, env_tbl) Hashtbl.t;
 }
 
 (* return None if variable doesn't exist, and Some if it does. the Some

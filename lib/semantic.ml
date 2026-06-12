@@ -77,7 +77,8 @@ let rec type_check_return program_data cur_return_type (ret: Ast.statement) =
         end
     | _ -> failwith "Impossible"
 
-and get_var_type program_data var: (Ast.data_type option) = match lookup_st program_data var with
+and get_var_type program_data var: (Ast.data_type option) =
+    match lookup_st program_data.current_file_scope var with
     | Some VariableSymbol x -> Some x
     | Some FunctionSymbol (param_dts, return_dt) ->
         Some (TFunction (param_dts, return_dt))
@@ -87,7 +88,7 @@ and get_var_type program_data var: (Ast.data_type option) = match lookup_st prog
 and type_check_struct_expression program_data (exp: Ast.expr) =
     match exp.kind with
     | StructExpr (type_name, expr_ht) ->
-        let expected_members_ht = match lookup_st program_data type_name with
+        let expected_members_ht = match lookup_st program_data.current_file_scope type_name with
             | Some StructSymbol x -> Hashtbl.copy x
             | _ ->
                 begin match get_var_type program_data type_name with
@@ -168,7 +169,7 @@ and type_check_binary program_data (binary: Ast.expr) =
                     raise (Type_invalid_operator_error (string_of_binary_op op, str_of_dt t1, str_of_dt t2, binary.pos))
 
                 | TNamed name ->
-                    if is_enum program_data name then
+                    if is_enum program_data.current_file_scope name then
                         begin match op with
                             | EqualOp | NotEqual -> Ast.TBoolean
                             | _ -> raise (Type_invalid_operator_error (
@@ -241,11 +242,11 @@ and type_check_call program_data (exp: Ast.expr) =
 
     match exp.kind with
     | Call (expr, param_exprs) ->
-        print_st program_data "before calling type check";
+        print_st program_data.current_file_scope "before calling type check";
         begin match expr with
         (* TODO: FunExpr should also be able to match `fn (str smth){}("hi")` *)
         | { kind = Variable x; _ } ->
-            begin match lookup_st program_data x with
+            begin match lookup_st program_data.current_file_scope x with
                 | Some FunctionSymbol (param_dts, ret_dt) ->
                     loop program_data param_exprs param_dts;
                     ret_dt
@@ -286,16 +287,17 @@ and type_check_assignment program_data (exp: Ast.expr) = match exp.kind with
     | _ -> failwith "Impossible"
 
 and type_check_struct_access program_data (exp: Ast.expr) =
+    let sym_tbl = program_data.current_file_scope in
     match exp.kind with
     | FieldAccess (expr, id) ->
         let type_name =
             (* TODO: this is redundant i already have it*)
             begin match type_check_expr program_data expr with
-                | TNamed x when not (is_enum program_data x) -> x
+                | TNamed x when not (is_enum sym_tbl x) -> x
                 | x -> raise (Type_mismatch_error (str_of_dt x, "a struct type", expr.pos))
             end
         in
-        let fields_ht = match lookup_st program_data type_name with
+        let fields_ht = match lookup_st sym_tbl type_name with
             | Some StructSymbol ht -> ht
             | Some x -> raise (Type_custom_error ("Not a struct type", expr.pos))
             | _ -> raise (Type_custom_error ("Struct type doesn't exist", exp.pos))
@@ -308,15 +310,16 @@ and type_check_struct_access program_data (exp: Ast.expr) =
     | _ -> failwith "Impossible"
 
 and type_check_enum_access program_data (expr: Ast.expr) =
+    let sym_tbl = program_data.current_file_scope in
     match expr.kind with
     | FieldAccess (expr, id) ->
         let type_name =
             begin match type_check_expr program_data expr with
-                | TNamed x when is_enum program_data x -> x
+                | TNamed x when is_enum sym_tbl x -> x
                 | x -> raise (Type_mismatch_error (str_of_dt x, "an enum type", expr.pos))
             end
         in
-        let enum_members = match lookup_st program_data type_name with
+        let enum_members = match lookup_st sym_tbl type_name with
             | Some EnumSymbol members -> members
             | Some x -> raise (Type_custom_error ("Not an enum type", expr.pos))
             | _ -> raise (Type_custom_error ("Enum type doesn't exist", expr.pos))
@@ -364,7 +367,7 @@ and type_check_expr program_data (exp: Ast.expr) = match exp.kind with
 
     | FieldAccess (expr, id) ->
         begin match type_check_expr program_data expr with
-            | Ast.TNamed x when is_enum program_data x -> type_check_enum_access program_data exp
+            | Ast.TNamed x when is_enum program_data.current_file_scope x -> type_check_enum_access program_data exp
             | Ast.TNamed x -> type_check_struct_access program_data exp
             | Ast.TArray _ | Ast.TString ->
                 if id = "length" then
@@ -391,7 +394,9 @@ and type_check_expr program_data (exp: Ast.expr) = match exp.kind with
     | StructExpr _ -> type_check_struct_expression program_data exp
     | Group exp -> type_check_expr program_data exp
 
-and type_check_statement program_data (cur_ret_type: Ast.data_type) (stmt: Ast.statement) = match stmt.kind with
+and type_check_statement program_data (cur_ret_type: Ast.data_type) (stmt: Ast.statement) =
+    let sym_tbl = program_data.current_file_scope in
+    match stmt.kind with
     | IfStmt (exp, body, else_body_op) ->
             let exp_type = type_check_expr program_data exp in
             begin match exp_type with
@@ -424,10 +429,10 @@ and type_check_statement program_data (cur_ret_type: Ast.data_type) (stmt: Ast.s
                 begin match e_type with
                     | TFunction (param_dts, return_dt) ->
                         let sym = FunctionSymbol (param_dts, return_dt) in
-                        insert_st program_data name sym;
+                        insert_st sym_tbl name sym;
                     | _ ->
                         let sym = VariableSymbol e_type in
-                        insert_st program_data name sym;
+                        insert_st sym_tbl name sym;
                 end;
                 (* set the type for those that were implicit and typecheck those that were explicit *)
                 begin match dt with
@@ -446,6 +451,7 @@ and type_check_statement program_data (cur_ret_type: Ast.data_type) (stmt: Ast.s
     | StructDeclStmt (name, ht) -> print_endline "Struct doesn't have type check??";
 
     | EnumDeclStmt (name, members) -> ()
+
     | ImportStmt s -> failwith "Importing not implemented"
 
     | BlockStmt body -> ignore (type_check_block program_data cur_ret_type body);
@@ -453,8 +459,8 @@ and type_check_statement program_data (cur_ret_type: Ast.data_type) (stmt: Ast.s
     | ExprStmt exp -> ignore (type_check_expr program_data exp);
 
 and type_check_statement_list program_data ret_type stmts =
-    let rec loop scope lst = match lst with
-        | h :: t -> type_check_statement scope ret_type h; loop scope t
+    let rec loop pg_data lst = match lst with
+        | h :: t -> type_check_statement pg_data ret_type h; loop pg_data t
         | [] -> ()
     in
     loop program_data stmts
@@ -463,22 +469,26 @@ and type_check_function_block program_data params dt body =
     let rec loop program_data lst = match lst with
         | h :: t ->
                 let sym = VariableSymbol (fst h) in
-                insert_st program_data (snd h) sym;
+                insert_st program_data.current_file_scope (snd h) sym;
                 loop program_data t
         | [] -> ()
     in
 
-    let inner_scope: scope = create_new_scope (Some program_data) in
-    loop inner_scope params;
-    type_check_statement_list inner_scope dt body
+    let inner_scope: scope = create_new_scope (Some program_data.current_file_scope) in
+    program_data.current_file_scope <- inner_scope;
+    loop program_data params;
+    type_check_statement_list program_data dt body
 
 and type_check_block program_data ret_type body =
-    let inner_scope: scope = create_new_scope (Some program_data) in
-    type_check_statement_list inner_scope ret_type body
+    let inner_scope: scope = create_new_scope (Some program_data.current_file_scope) in
+    program_data.current_file_scope <- inner_scope;
+    type_check_statement_list program_data ret_type body
 
 and type_check program_data ast = List.iter (type_check_statement program_data TInteger) ast
 
-and collect_statement sym_tbl (stmt: Ast.statement) = match stmt.kind with
+and collect_statement program_data (stmt: Ast.statement) =
+    let sym_tbl = program_data.current_file_scope in
+    match stmt.kind with
     | VarDeclStmt (_dt, name, Some { kind = FunExpr (params, return_op, _body); _ }) ->
         let param_dts = List.map (fun p -> fst p) params in
         let sym = FunctionSymbol (param_dts, return_op) in
@@ -515,8 +525,15 @@ and collect_declarations ast =
         | [] -> ()
     in
     let global_scope: scope = { outer = None; tbl = Hashtbl.create 11 } in
-    loop global_scope ast;
-    global_scope
+
+    let pg_data: program_data = {
+        current_file_scope = global_scope;
+        modules = Hashtbl.create 3;
+        import_tracking = Semantic_types.StringSet.empty
+    } in
+
+    loop pg_data ast;
+    pg_data
 
 
 and inject_stdlib_symbols program_data =
@@ -524,9 +541,10 @@ and inject_stdlib_symbols program_data =
 
 and run_type_checking (ast: Ast.block) =
     let program_data = collect_declarations ast in
-    inject_stdlib_symbols program_data;
-    print_st program_data "Collected declarations for type-checking:";
+    let sym_tbl = program_data.current_file_scope in
+    inject_stdlib_symbols sym_tbl;
+    print_st sym_tbl "Collected declarations for type-checking:";
     type_check program_data ast;
-    print_st program_data "after type checking st";
+    print_st sym_tbl "after type checking st";
     program_data
 
